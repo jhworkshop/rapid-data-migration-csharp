@@ -3,27 +3,21 @@
 没错，就是
 ### “快”！
 
-----
-
 ## 为什么“快”？
 要解释这个问题，首先要说说数据迁移是什么一回事。
 
 数据迁移通常是这样子的：
 
-![](https://ebuy.ucoz.com/rdm/seq1.png)
-
-----
+!(https://ebuy.ucoz.com/rdm/seq1.png)
 
 如果通用些，可能就类似这个样子了：
 
-![](https://ebuy.ucoz.com/rdm/seq2.png)
-
-----
+!(https://ebuy.ucoz.com/rdm/seq2.png)
 
 这是一个串行处理的过程，提取数据的时候，目标库空闲着，写入数据的时候，源库空闲着，处理能力白白浪费了。
 可见，只要将这个串行处理改为并行，数据迁移效率即可大大提高。
 
-![](https://ebuy.ucoz.com/rdm/seq3.png)
+!(https://ebuy.ucoz.com/rdm/seq3.png)
 
 在某些测试场景下，仅这项小小的改动，就可以提升 30% 的迁移效率，没写错，30%，而已（因为是未经严谨优化的测试场景，就不具体展开介绍了）！
 
