@@ -97,4 +97,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ## 写在最后
 这是一个实验性项目，实现了一种解决思路，虽然完成度颇高，应用仍须谨慎。
 
-J&H Workshop 是一个松散的软件工作室，成立于 2009 年春天，致力于小思维、小工具。
+J&H Workshop 成立于 2009 年春天，致力于小思维、小工具。
