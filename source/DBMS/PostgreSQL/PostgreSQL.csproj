@@ -7,7 +7,7 @@
     <ProjectGuid>{E134D80E-2200-4346-A856-BA54B5AC85A3}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DataMigration.DBMS.PostgreSQL</RootNamespace>
+    <RootNamespace>JHWork.DataMigration.DBMS.PostgreSQL</RootNamespace>
     <AssemblyName>PostgreSQL</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>

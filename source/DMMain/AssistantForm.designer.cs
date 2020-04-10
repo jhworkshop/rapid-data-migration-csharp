@@ -1,4 +1,4 @@
-﻿namespace DataMigration
+﻿namespace JHWork.DataMigration
 {
     partial class AssistantForm
     {

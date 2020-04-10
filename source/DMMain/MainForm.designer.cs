@@ -1,4 +1,4 @@
-﻿namespace DataMigration
+﻿namespace JHWork.DataMigration
 {
     partial class MainForm
     {
@@ -165,8 +165,8 @@
             // 
             // listView
             // 
-            this.listView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
+            this.listView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
             | System.Windows.Forms.AnchorStyles.Right)));
             this.listView.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.listView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {

@@ -1,9 +1,9 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace DataMigration
+namespace JHWork.DataMigration
 {
     /// <summary>
     /// 执行器状态

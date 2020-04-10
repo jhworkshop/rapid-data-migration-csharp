@@ -1,4 +1,4 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using Npgsql;
 using NpgsqlTypes;
 using System;
@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Text;
 
-namespace DataMigration.DBMS.PostgreSQL
+namespace JHWork.DataMigration.DBMS.PostgreSQL
 {
     /// <summary>
     /// 基于合并算法的更新数据脚本对象
@@ -574,13 +574,11 @@ namespace DataMigration.DBMS.PostgreSQL
                             bool found = false;
 
                             foreach (TableFK fk2 in fks)
-                            {
                                 if (fk2.Name.Equals(s) && fk2.Order > 0)
                                 {
                                     found = true;
                                     break;
                                 }
-                            }
 
                             if (!found)
                             {

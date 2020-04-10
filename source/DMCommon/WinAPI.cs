@@ -1,7 +1,6 @@
-﻿using System;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
-namespace DataMigration.Common
+namespace JHWork.DataMigration.Common
 {
     /// <summary>
     /// Windows API 声明

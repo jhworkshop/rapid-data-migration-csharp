@@ -7,7 +7,7 @@
     <ProjectGuid>{E8DA2DBD-F410-4AC3-88DE-2698B9C9A622}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DataMigration.DBMS.MySQL</RootNamespace>
+    <RootNamespace>JHWork.DataMigration.DBMS.MySQL</RootNamespace>
     <AssemblyName>MySQL</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
@@ -35,8 +35,8 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="MySqlConnector, Version=0.63.1.0, Culture=neutral, PublicKeyToken=d33d3e53aa5f8c92, processorArchitecture=MSIL">
-      <HintPath>..\..\packages\MySqlConnector.0.63.1\lib\net471\MySqlConnector.dll</HintPath>
+    <Reference Include="MySqlConnector, Version=0.63.2.0, Culture=neutral, PublicKeyToken=d33d3e53aa5f8c92, processorArchitecture=MSIL">
+      <HintPath>..\..\packages\MySqlConnector.0.63.2\lib\net471\MySqlConnector.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Buffers, Version=4.0.2.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">

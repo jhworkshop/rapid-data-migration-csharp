@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace DataMigration.Common
+namespace JHWork.DataMigration.Common
 {
     /// <summary>
     /// Microsoft SQL Server WITH 类型

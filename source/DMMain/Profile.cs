@@ -1,10 +1,10 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 
-namespace DataMigration
+namespace JHWork.DataMigration
 {
     /// <summary>
     /// 执行模式

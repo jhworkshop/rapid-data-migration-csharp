@@ -1,11 +1,11 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace DataMigration.DBMS.MySQL
+namespace JHWork.DataMigration.DBMS.MySQL
 {
     /// <summary>
     /// 表外键信息
@@ -515,13 +515,11 @@ namespace DataMigration.DBMS.MySQL
                             bool found = false;
 
                             foreach (TableFK fk2 in fks)
-                            {
                                 if (fk2.Name.Equals(s) && fk2.Order > 0)
                                 {
                                     found = true;
                                     break;
                                 }
-                            }
 
                             if (!found)
                             {

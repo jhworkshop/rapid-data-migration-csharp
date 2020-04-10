@@ -6,7 +6,7 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProjectGuid>{1B78932F-B7C3-4846-84C8-BBBA2DD979BA}</ProjectGuid>
     <OutputType>WinExe</OutputType>
-    <RootNamespace>DataMigration</RootNamespace>
+    <RootNamespace>JHWork.DataMigration</RootNamespace>
     <AssemblyName>DMMain</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>

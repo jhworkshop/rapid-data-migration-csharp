@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace DataMigration.Common
+namespace JHWork.DataMigration.Common
 {
     /// <summary>
     /// 异步日志类

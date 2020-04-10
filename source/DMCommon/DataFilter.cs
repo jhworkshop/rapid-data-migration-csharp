@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace DataMigration.Common
+namespace JHWork.DataMigration.Common
 {
     /// <summary>
     /// 数据过滤器接口，当目标表与源表字段不是简单一一对应时，可用数据过滤器做数据转换

@@ -7,7 +7,7 @@
     <ProjectGuid>{24094BA1-CA13-4725-8A1E-2233B4BFCC79}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DataMigration.Common</RootNamespace>
+    <RootNamespace>JHWork.DataMigration.Common</RootNamespace>
     <AssemblyName>DMCommon</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>

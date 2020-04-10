@@ -1,9 +1,9 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using System;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace DataMigration
+namespace JHWork.DataMigration
 {
     static class Program
     {

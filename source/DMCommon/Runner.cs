@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace DataMigration.Common
+namespace JHWork.DataMigration.Common
 {
     /// <summary>
     /// 数据状态，用于标记执行的状态。

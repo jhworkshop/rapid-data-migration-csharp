@@ -1,10 +1,10 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Windows.Forms;
 
-namespace DataMigration
+namespace JHWork.DataMigration
 {
     /// <summary>
     /// 配置助手

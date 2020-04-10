@@ -1,4 +1,4 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -16,7 +16,7 @@ using System.Threading.Tasks;
 //
 // 即，每个实例包含一组串行任务，每任务包含一组并行迁移表（二维数组结构用于解决表之间的依赖关系）。
 
-namespace DataMigration.Runner.Migration
+namespace JHWork.DataMigration.Runner.Migration
 {
     /// <summary>
     /// 迁移执行器，执行库与库之间的数据迁移。
@@ -383,7 +383,8 @@ namespace DataMigration.Runner.Migration
                                             scripts.Add(script);
                                         }
 
-                                    if (data.ReadCount == 0 || status.IsStopped()) break;
+                                    // 获取不到预期的记录数，作最后一页处理
+                                    if (data.ReadCount != task.ReadPages * table.PageSize || status.IsStopped()) break;
                                 }
                                 finally
                                 {

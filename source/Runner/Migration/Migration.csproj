@@ -7,7 +7,7 @@
     <ProjectGuid>{F81B0D61-9778-4F99-B6E5-3E12D82E50D0}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DataMigration.Runner.Migration</RootNamespace>
+    <RootNamespace>JHWork.DataMigration.Runner.Migration</RootNamespace>
     <AssemblyName>Migration</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>

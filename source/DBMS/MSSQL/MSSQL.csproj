@@ -7,7 +7,7 @@
     <ProjectGuid>{1BFF4B1B-1A76-4E63-A178-58F5756E718A}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>DataMigration.DBMS.MSSQL</RootNamespace>
+    <RootNamespace>JHWork.DataMigration.DBMS.MSSQL</RootNamespace>
     <AssemblyName>MSSQL</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>

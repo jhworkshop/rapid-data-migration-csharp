@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 
-namespace DataMigration.Common
+namespace JHWork.DataMigration.Common
 {
     /// <summary>
     /// 数据封装接口

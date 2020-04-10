@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace DataMigration.Properties {
+namespace JHWork.DataMigration.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]

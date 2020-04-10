@@ -1,14 +1,11 @@
-﻿using DataMigration.Common;
+﻿using JHWork.DataMigration.Common;
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
-using System.Diagnostics;
-using System.Linq;
 using System.Text;
 
-namespace DataMigration.DBMS.MSSQL
+namespace JHWork.DataMigration.DBMS.MSSQL
 {
     /// <summary>
     /// 表外键信息
@@ -142,7 +139,7 @@ namespace DataMigration.DBMS.MSSQL
             if (Version.Parse(conn.ServerVersion).Major >= 10) // 2008 或更新版本
             {
                 StringBuilder sb = new StringBuilder();
-                string[] fields = ExcludeFields(ExcludeFields(table.DestFields, table.KeyFields), table.SkipFields);
+                string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
                 string field = ProcessFieldName(table.KeyFields[0]);
 
                 sb.Append("MERGE INTO ").Append(destTable).Append(" A USING ").Append(tmpTable).Append(" B ON A.")
@@ -171,7 +168,7 @@ namespace DataMigration.DBMS.MSSQL
             else
             {
                 StringBuilder sb = new StringBuilder();
-                string[] fields = ExcludeFields(ExcludeFields(table.DestFields, table.KeyFields), table.SkipFields);
+                string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
                 string field = ProcessFieldName(fields[0]);
 
                 sb.Append("UPDATE ").Append(destTable).Append(" SET ").Append(field).Append(" = B.").Append(field);
@@ -224,7 +221,7 @@ namespace DataMigration.DBMS.MSSQL
         {
             UpdateScript rst = new UpdateScript();
             StringBuilder sb = new StringBuilder();
-            string[] fields = ExcludeFields(ExcludeFields(table.DestFields, table.KeyFields), table.SkipFields);
+            string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
 
             data.MapFields(fields);
             sb.Append("UPDATE ").Append(ProcessTableName(table.DestName)).Append(" SET ")
@@ -343,6 +340,32 @@ namespace DataMigration.DBMS.MSSQL
 
                 foreach (string s in skipFields)
                     skipList.Add(s.ToLower());
+
+                foreach (string s in fields)
+                    if (!skipList.Contains(s.ToLower()))
+                        lst.Add(s);
+
+                return lst.ToArray();
+            }
+        }
+
+        private string[] ExcludeFields(string[] fields, string[] skipFields, string[] skipFields2)
+        {
+            List<string> skipList = new List<string>();
+
+            if (skipFields != null && skipFields.Length != 0)
+                foreach (string s in skipFields)
+                    skipList.Add(s.ToLower());
+
+            if (skipFields2 != null && skipFields2.Length != 0)
+                foreach (string s in skipFields2)
+                    skipList.Add(s.ToLower());
+
+            if (skipList.Count == 0)
+                return fields;
+            else
+            {
+                List<string> lst = new List<string>();
 
                 foreach (string s in fields)
                     if (!skipList.Contains(s.ToLower()))
@@ -593,13 +616,11 @@ namespace DataMigration.DBMS.MSSQL
                             bool found = false;
 
                             foreach (TableFK fk2 in fks)
-                            {
                                 if (fk2.Name.Equals(s) && fk2.Order > 0)
                                 {
                                     found = true;
                                     break;
                                 }
-                            }
 
                             if (!found)
                             {
@@ -772,22 +793,64 @@ namespace DataMigration.DBMS.MSSQL
         public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
             ref IDataWrapper reader)
         {
-            // 语法格式形如：仅 2008 或更新版本
-            // SELECT <fieldsSQL> FROM (SELECT ROW_NUMBER() OVER (ORDER BY <orderSQL>) AS
-            // '_RowNum_', <fieldsSQL> FROM <tableName> {WHERE <whereSQL>}) A
-            // WHERE [A].[_RowNum_] BETWEEN <firstRow> AND <toRow>
-            // 最后面如果添加排序，则性能将受影响
-            string fieldsSQL = ProcessFieldNames(table.SourceFields);
-            StringBuilder sb = new StringBuilder()
-                .Append("SELECT ").Append(fieldsSQL).Append(" FROM (SELECT ROW_NUMBER() OVER (ORDER BY ")
-                .Append(table.OrderSQL).Append(") AS '_RowNum_', ").Append(fieldsSQL).Append(" FROM ")
-                .Append(ProcessTableName(table.SourceName, with));
+            StringBuilder sb = new StringBuilder();
 
-            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                sb.Append(" WHERE ").Append(table.SourceWhereSQL);
+            if (Version.Parse(conn.ServerVersion).Major >= 10) // 2008 或更新版本
+            {
+                // SELECT <fieldsSQL> FROM (SELECT ROW_NUMBER() OVER (ORDER BY 
+                // <orderSQL>) AS '_RowNum_', <fieldsSQL> FROM
+                // <tableName>
+                // {WHERE <whereSQL>}
+                // ) A WHERE A.[_RowNum_] BETWEEN <fromRow> AND <toRow>
+                // ORDER BY <orderSQL> -- 如果添加排序，则性能将受影响
+                string fieldsSQL = ProcessFieldNames(table.SourceFields);
 
-            sb.Append(") A WHERE [A].[_RowNum_] BETWEEN ").Append(fromRow).Append(" AND ").Append(toRow);
-            //.Append(" ORDER BY ").Append(orderSQL);
+                sb.Append("SELECT ").Append(fieldsSQL).Append(" FROM (SELECT ROW_NUMBER() OVER (ORDER BY ")
+                    .Append(table.OrderSQL).Append(") AS '_RowNum_', ").Append(fieldsSQL).Append(" FROM ")
+                    .Append(ProcessTableName(table.SourceName, with));
+
+                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                    sb.Append(" WHERE ").Append(table.SourceWhereSQL);
+
+                sb.Append(") A WHERE [A].[_RowNum_] BETWEEN ").Append(fromRow).Append(" AND ").Append(toRow);
+            }
+            else
+            {
+                // 此语法要求 whereSQL、orderSQL 包含表名前缀，如：MyTable.KeyField ASC
+                // SELECT TOP <toRow - fromRow + 1> <tableName.fieldsSQL> FROM
+                // <tableNameWith> LEFT JOIN (SELECT TOP <fromRow - 1>
+                // <keyFieldsSQL> FROM <tableNameWith>
+                // {WHERE <whereSQL>}
+                // ORDER BY <orderSQL>) B ON
+                // <tableName.keyFields> = <B.keyFields>
+                // WHERE <B.keyFields[0]> IS NULL
+                // {AND <whereSQL>}
+                // ORDER BY <orderSQL>
+                string fieldsSQL = ProcessFieldNames(table.SourceFields, table.SourceName);
+                string keyFieldsSQL = ProcessFieldNames(table.KeyFields);
+                string tableName = ProcessTableName(table.SourceName);
+                string tableNameWith = ProcessTableName(table.SourceName, with);
+                
+                sb.Append("SELECT TOP ").Append(toRow - fromRow + 1).Append(" ").Append(fieldsSQL).Append(" FROM ")
+                    .Append(tableNameWith).Append(" LEFT JOIN (SELECT TOP ").Append(fromRow - 1).Append(" ")
+                    .Append(keyFieldsSQL).Append(" FROM ").Append(tableNameWith);
+                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                    sb.Append(" WHERE ").Append(table.SourceWhereSQL);
+                sb.Append(" ORDER BY ").Append(table.OrderSQL).Append(") B ON ");
+
+                string keyField = ProcessFieldName(table.KeyFields[0]);
+
+                sb.Append(tableName).Append(".").Append(keyField).Append(" = ").Append("B.").Append(keyField);
+                for (int i = 1; i < table.KeyFields.Length; i++)
+                {
+                    keyField = ProcessFieldName(table.KeyFields[i]);
+                    sb.Append(tableName).Append(".").Append(keyField).Append(" = ").Append("B.").Append(keyField);
+                }
+                sb.Append(" WHERE B.").Append(keyField).Append(" IS NULL");
+                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                    sb.Append(" AND ").Append(table.SourceWhereSQL);
+                sb.Append(" ORDER BY ").Append(table.OrderSQL);
+            }
 
             return Query(sb.ToString(), parms, ref reader);
         }
