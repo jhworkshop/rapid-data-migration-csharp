@@ -13,6 +13,7 @@
 ![](https://ebuy.ucoz.com/rdm/seq2.png)
 
 这是一个串行处理的过程，因此，提取数据的时候，目标库空闲着，写入数据的时候，源库空闲着，处理能力白白浪费了。
+
 可见，只要将这个串行处理改为并行，数据迁移效率即可大大提高。改动后类似这个样子：
 
 ![](https://ebuy.ucoz.com/rdm/seq3.png)
@@ -71,8 +72,11 @@
 | PostgreSQL | 10.12 | √ | √ | √ |
 
 ## 四、开发环境
-Microsoft Visual Studio Community 2019
-.NET Framework 4.8
+
+| 工具 | 版本 |
+| ---- | ---- |
+| Microsoft Visual Studio | Community 2019 |
+| .NET Framework | 4.8 |
 
 ## 五、授权
 MIT License
@@ -87,6 +91,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## 六、感谢
 感谢我们的老朋友 [Thomas](https://github.com/gztomash) 贡献了大部分实现代码。
+
 感谢 [MySqlConnector](https://mysqlconnector.net/)、[Npgsql](https://www.npgsql.org/)、[Newtonsoft.Json](https://www.newtonsoft.com/json) 等等项目，没有它们，本项目不可能推进得如此顺利。
 
 ## 写在最后
