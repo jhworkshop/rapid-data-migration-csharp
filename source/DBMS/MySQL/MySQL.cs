@@ -118,25 +118,29 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
         }
 
-        public bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        public bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             if (data.Read())
             {
                 if (table.WriteMode == WriteModes.Append)
                     if (isSupportCSV)
-                        BuildScriptWithCSV(table, data, filter, ref script);
+                        BuildScriptWithCSV(table, data, filter, out script);
                     else
-                        BuildScriptWithSQL(table, data, filter, ref script);
+                        BuildScriptWithSQL(table, data, filter, out script);
                 else // MySQL SQL 写入已经足够快，不需要 MERGE 模式
-                    BuildScriptWithSQL(table, data, filter, ref script);
+                    BuildScriptWithSQL(table, data, filter, out script);
 
                 return true;
             }
+            else
+            {
+                script = null;
 
-            return false;
+                return false;
+            }
         }
 
-        protected void BuildScriptWithCSV(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        protected void BuildScriptWithCSV(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string file = Path.GetTempFileName();
             FileStreamWriter fc = new FileStreamWriter(file, new UTF8Encoding(false));
@@ -167,7 +171,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             script = new CSVScript() { CSVFile = file, Fields = fields };
         }
 
-        protected void BuildScriptWithSQL(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        protected void BuildScriptWithSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
@@ -281,10 +285,11 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
         }
 
-        public bool ExecScript(Table table, object script, ref uint count)
+        public bool ExecScript(Table table, object script, out uint count)
         {
+            count = 0;
             if (script is string)
-                return Execute((string)script, null, ref count);
+                return Execute((string)script, null, out count);
             else if (script is CSVScript obj)
             {
                 try
@@ -319,7 +324,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             return false;
         }
 
-        private bool Execute(string sql, Dictionary<string, object> parms, ref uint count)
+        private bool Execute(string sql, Dictionary<string, object> parms, out uint count)
         {
             try
             {
@@ -338,6 +343,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 errMsg = ex.Message;
                 Logger.WriteLogExcept(title, ex);
                 Logger.WriteLog(title, sql);
+                count = 0;
 
                 return false;
             }
@@ -366,11 +372,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 return obj.ToString();
         }
 
-        public bool GetFieldNames(string tableName, ref string[] fieldNames)
+        public bool GetFieldNames(string tableName, out string[] fieldNames)
         {
-            IDataWrapper data = null;
-
-            if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, ref data))
+            if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, out IDataWrapper data))
                 try
                 {
                     fieldNames = data.GetFieldNames();
@@ -382,7 +386,11 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     data.Close();
                 }
             else
+            {
+                fieldNames = null;
+
                 return false;
+            }
         }
 
         private string GetFmtValue(object obj)
@@ -413,9 +421,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
         private bool GetSupportCSV()
         {
-            IDataWrapper data = null;
-
-            if (Query("SHOW VARIABLES LIKE \"local_infile\"", null, ref data))
+            if (Query("SHOW VARIABLES LIKE \"local_infile\"", null, out IDataWrapper data))
                 try
                 {
                     if (data.Read() && "ON".Equals(((string)data.GetValue(1)).ToUpper()))
@@ -432,11 +438,10 @@ namespace JHWork.DataMigration.DBMS.MySQL
         public bool GetTables(IProgress progress, List<TableInfo> lst)
         {
             List<TableFK> fks = new List<TableFK>();
-            IDataWrapper data = null;
             int total = 0, position = 0;
 
             // 获取所有用户表清单
-            if (Query("SHOW TABLES", null, ref data))
+            if (Query("SHOW TABLES", null, out IDataWrapper data))
                 try
                 {
                     while (data.Read())
@@ -456,7 +461,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
                 if (Query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
                     + $" WHERE TABLE_NAME = \"{fk.Name}\" AND CONSTRAINT_NAME = \"PRIMARY\""
-                    + $" AND TABLE_SCHEMA = \"{dbName}\" ORDER BY ORDINAL_POSITION ASC", null, ref data))
+                    + $" AND TABLE_SCHEMA = \"{dbName}\" ORDER BY ORDINAL_POSITION ASC", null, out data))
                 {
                     try
                     {
@@ -478,7 +483,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             {
                 if (Query("SELECT REFERENCED_TABLE_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
                     + $" WHERE TABLE_SCHEMA = \"{dbName}\" AND CONSTRAINT_NAME <> \"PRIMARY\""
-                    + $" AND TABLE_NAME = \"{fk.Name}\" AND REFERENCED_TABLE_NAME IS NOT NULL", null, ref data))
+                    + $" AND TABLE_NAME = \"{fk.Name}\" AND REFERENCED_TABLE_NAME IS NOT NULL", null, out data))
                 {
                     try
                     {
@@ -597,7 +602,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
         }
 
-        private bool Query(string sql, Dictionary<string, object> parms, ref IDataWrapper reader)
+        private bool Query(string sql, Dictionary<string, object> parms, out IDataWrapper reader)
         {
             try
             {
@@ -616,22 +621,23 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 errMsg = ex.Message;
                 Logger.WriteLogExcept(title, ex);
                 Logger.WriteLog(title, sql);
+                reader = null;
 
                 return false;
             }
         }
 
         public bool QueryCount(string tableName, string whereSQL, WithEnums with, Dictionary<string, object> parms,
-            ref ulong count)
+            out ulong count)
         {
-            IDataWrapper data = null;
             StringBuilder sb = new StringBuilder()
                 .Append("SELECT COUNT(*) AS \"_ROW_COUNT_\" FROM ").Append(ProcessTableName(tableName));
 
             if (!string.IsNullOrEmpty(whereSQL))
                 sb.Append(" WHERE ").Append(whereSQL);
 
-            if (Query(sb.ToString(), parms, ref data))
+            count = 0;
+            if (Query(sb.ToString(), parms, out IDataWrapper data))
                 try
                 {
                     if (data.Read())
@@ -643,8 +649,6 @@ namespace JHWork.DataMigration.DBMS.MySQL
                         else
                             count = (ulong)(int)o;
                     }
-                    else
-                        count = 0;
 
                     return true;
                 }
@@ -657,7 +661,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
         }
 
         public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
-            ref IDataWrapper reader)
+            out IDataWrapper reader)
         {
             // 语法格式形如：
             // SELECT <fieldsSQL> FROM <tableName> {WHERE <whereSQL>}
@@ -674,16 +678,14 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             sb.Append(" LIMIT ").Append(fromRow - 1).Append(", ").Append(toRow - fromRow + 1);
 
-            return Query(sb.ToString(), parms, ref reader);
+            return Query(sb.ToString(), parms, out reader);
         }
 
         public bool QueryParam(string sql, Dictionary<string, object> parms)
         {
-            IDataWrapper data = null;
-
             if (!string.IsNullOrEmpty(sql))
             {
-                if (Query(sql, null, ref data))
+                if (Query(sql, null, out IDataWrapper data))
                     try
                     {
                         if (data.Read())

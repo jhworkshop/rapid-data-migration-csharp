@@ -37,7 +37,7 @@ namespace JHWork.DataMigration
                     importedTables.Clear();
 
                     // 暂时只支持第一个实例
-                    assist.LoadSample(profile.Instances[0], source, dest, importedTables, ref importedParam);
+                    assist.LoadSample(profile.Instances[0], source, dest, importedTables, out importedParam);
 
                     runner.Text = profile.Runner;
 

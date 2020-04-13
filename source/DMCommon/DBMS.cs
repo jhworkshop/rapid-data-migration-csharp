@@ -120,7 +120,7 @@ namespace JHWork.DataMigration.Common
         /// <param name="tableName">表名</param>
         /// <param name="fieldNames">字段名称清单</param>
         /// <returns>成功获取则返回 true，否则返回 false</returns>
-        bool GetFieldNames(string tableName, ref string[] fieldNames);
+        bool GetFieldNames(string tableName, out string[] fieldNames);
 
         /// <summary>
         /// 统计记录数
@@ -132,7 +132,7 @@ namespace JHWork.DataMigration.Common
         /// <param name="count">记录数</param>
         /// <returns>成功统计则返回 true，并返回记录数，否则返回 false</returns>
         bool QueryCount(string tableName, string whereSQL, WithEnums with, Dictionary<string, object> parms,
-            ref ulong count);
+            out ulong count);
     }
 
     /// <summary>
@@ -151,7 +151,7 @@ namespace JHWork.DataMigration.Common
         /// <param name="reader">结果集</param>
         /// <returns>成功查询则返回 true，并返回结果集，否则返回 false</returns>
         bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
-            ref IDataWrapper reader);
+            out IDataWrapper reader);
     }
 
     /// <summary>
@@ -173,7 +173,7 @@ namespace JHWork.DataMigration.Common
         /// <param name="filter">数据过滤器</param>
         /// <param name="script">数据脚本对象</param>
         /// <returns>成功构建则返回 true，并返回数据脚本对象，否则返回 false</returns>
-        bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, ref object script);
+        bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, out object script);
 
         /// <summary>
         /// 提交事务
@@ -188,7 +188,7 @@ namespace JHWork.DataMigration.Common
         /// <param name="script">数据脚本对象</param>
         /// <param name="count">成功写入的记录行数</param>
         /// <returns>成功则返回 true，否则返回 false</returns>
-        bool ExecScript(Table table, object script, ref uint count);
+        bool ExecScript(Table table, object script, out uint count);
 
         /// <summary>
         /// 查询参数

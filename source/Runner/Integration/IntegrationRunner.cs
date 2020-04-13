@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -73,8 +74,7 @@ namespace JHWork.DataMigration.Runner.Integration
 
             foreach (JObject obj in objs)
             {
-                string parms = "";
-                IntegrationTable[][] tables = AnalyseTable($"{path}\\{obj["tables"]}", ref parms);
+                IntegrationTable[][] tables = AnalyseTable($"{path}\\{obj["tables"]}", out string parms);
                 IntegrationTask[][] tasks = new IntegrationTask[tables.Length][];
                 List<IntegrationTask> taskList = new List<IntegrationTask>();
 
@@ -122,7 +122,7 @@ namespace JHWork.DataMigration.Runner.Integration
             return instances.ToArray();
         }
 
-        private IntegrationTable[][] AnalyseTable(string file, ref string parms)
+        private IntegrationTable[][] AnalyseTable(string file, out string parms)
         {
             JObject obj = LoadAndDeserialize(file);
             JArray tables = obj["tables"] as JArray;
@@ -197,7 +197,7 @@ namespace JHWork.DataMigration.Runner.Integration
                 return new IntegrationTable[][] { };
         }
 
-        private bool Connect(Database db, ref IDBMSReader reader)
+        private bool Connect(Database db, out IDBMSReader reader)
         {
             reader = DBMSFactory.GetDBMSReaderByName(db.DBMS);
             if (reader == null)
@@ -209,7 +209,7 @@ namespace JHWork.DataMigration.Runner.Integration
                 return reader.Connect(db);
         }
 
-        private bool Connect(Database db, ref IDBMSWriter writer)
+        private bool Connect(Database db, out IDBMSWriter writer)
         {
             writer = DBMSFactory.GetDBMSWriterByName(db.DBMS);
             if (writer == null)
@@ -256,9 +256,7 @@ namespace JHWork.DataMigration.Runner.Integration
                             task.Status = DataState.Running;
                             try
                             {
-                                string reason = "取消操作";
-
-                                IntegrateTable(task, ref reason);
+                                IntegrateTable(task, out string reason);
 
                                 if (task.Table.Status == DataState.Done)
                                 {
@@ -288,7 +286,7 @@ namespace JHWork.DataMigration.Runner.Integration
             }
         }
 
-        public void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, ref string param)
+        public void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, out string param)
         {
             if (ins.Tasks[0] is IntegrationTask task)
             {
@@ -296,6 +294,8 @@ namespace JHWork.DataMigration.Runner.Integration
                 DuplicateDatabase(task.Dest, dest);
                 param = task.Params;
             }
+            else
+                param = "";
 
             foreach (Common.Task t in ins.Tasks)
                 if (t is IntegrationTask ta) tables.Add(ta.Table);
@@ -317,9 +317,7 @@ namespace JHWork.DataMigration.Runner.Integration
                     task.Table.Progress = 0;
                     task.Table.Status = DataState.Normal;
 
-                    IDBMSWriter dest = null;
-
-                    if (Connect(task.Dest, ref dest))
+                    if (Connect(task.Dest, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -334,21 +332,18 @@ namespace JHWork.DataMigration.Runner.Integration
                                 foreach (Database db in task.Sources)
                                 {
                                     if (task.Status != DataState.Error && !status.IsStopped())
-                                        if (Connect(db, ref source))
+                                        if (Connect(db, out source))
                                         {
-                                            string[] fields = null;
                                             bool isError = true;
 
                                             // #1: 检查表存在，并缓存字段
-                                            if (source.GetFieldNames(task.Table.SourceName, ref fields))
+                                            if (source.GetFieldNames(task.Table.SourceName, out string[] fields))
                                             {
                                                 task.Table.SourceFields = fields;
 
-                                                ulong count = 0;
-
                                                 // #2: 获取记录数
                                                 if (source.QueryCount(task.Table.SourceName, task.Table.SourceWhereSQL,
-                                                    WithEnums.NoLock, parms, ref count))
+                                                    WithEnums.NoLock, parms, out ulong count))
                                                 {
                                                     task.Total += count;
                                                     isError = false;
@@ -362,9 +357,7 @@ namespace JHWork.DataMigration.Runner.Integration
                             }
                             else if ("write".Equals(act))
                             {
-                                string[] fields = null;
-
-                                if (dest.GetFieldNames(task.Table.DestName, ref fields))
+                                if (dest.GetFieldNames(task.Table.DestName, out string[] fields))
                                     task.Table.DestFields = fields;
                                 else
                                     task.Status = DataState.Error;
@@ -384,13 +377,12 @@ namespace JHWork.DataMigration.Runner.Integration
             return "Integration";
         }
 
-        private void IntegrateTable(IntegrationTask task, ref string reason)
+        private void IntegrateTable(IntegrationTask task, out string reason)
         {
+            reason = "取消操作";
             if (status.IsStopped()) return;
 
-            IDBMSWriter dest = null;
-
-            if (Connect(task.Dest, ref dest))
+            if (Connect(task.Dest, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -399,7 +391,7 @@ namespace JHWork.DataMigration.Runner.Integration
                 try
                 {
                     // 汇集数据
-                    IntegrateTableWithScript(task, parms, dest, ref reason);
+                    IntegrateTableWithScript(task, parms, dest, out reason);
 
                     if (task.Table.Status != DataState.Error && !status.IsStopped())
                     {
@@ -429,9 +421,9 @@ namespace JHWork.DataMigration.Runner.Integration
         }
 
         private void IntegrateTableWithScript(IntegrationTask task, Dictionary<string, object> parms, IDBMSWriter dest,
-            ref string failReason)
+            out string failReason)
         {
-            List<object> scripts = new List<object>();
+            ConcurrentQueue<object> scripts = new ConcurrentQueue<object>();
             bool read = false;
             string reason = "";
 
@@ -449,11 +441,10 @@ namespace JHWork.DataMigration.Runner.Integration
                         {
                             if (status.IsStopped() || task.Table.Status == DataState.Error) break;
 
-                            IDBMSReader source = null;
                             uint fromRow = 1, toRow = task.ReadPages * task.Table.PageSize;
 
                             // 连接数据源
-                            if (!Connect(db, ref source))
+                            if (!Connect(db, out IDBMSReader source))
                             {
                                 task.Table.Status = DataState.Error;
                                 reason = "连接失败！";
@@ -470,18 +461,15 @@ namespace JHWork.DataMigration.Runner.Integration
                                 if (status.IsStopped() || task.Table.Status == DataState.Error) break;
 
                                 // 取数
-                                if (source.QueryPage(task.Table, fromRow, toRow, WithEnums.NoLock, parms, ref data))
+                                if (source.QueryPage(task.Table, fromRow, toRow, WithEnums.NoLock, parms, out data))
                                     try
                                     {
                                         object script = null;
 
                                         data.MapFields(task.Table.DestFields);
-                                        while (dest.BuildScript(task.Table, data, filter, ref script)
+                                        while (dest.BuildScript(task.Table, data, filter, out script)
                                             && !status.IsStopped() && task.Table.Status != DataState.Error)
-                                            lock (task.Table)
-                                            {
-                                                scripts.Add(script);
-                                            }
+                                            scripts.Enqueue(script);
 
                                         // 获取不到预期的记录数，作最后一页处理
                                         if (data.ReadCount != task.ReadPages * task.Table.PageSize
@@ -508,19 +496,11 @@ namespace JHWork.DataMigration.Runner.Integration
                     }
                     else if ("write".Equals(act))
                     {
-                        object script;
-                        uint r = 0;
-
                         while (task.Table.Status != DataState.Error && (!read || scripts.Count > 0) && !status.IsStopped())
                             if (scripts.Count > 0)
                             {
-                                lock (task.Table)
-                                {
-                                    script = scripts[0];
-                                    scripts.RemoveAt(0);
-                                }
-
-                                if (!dest.ExecScript(task.Table, script, ref r))
+                                scripts.TryDequeue(out object script);
+                                if (!dest.ExecScript(task.Table, script, out uint r))
                                 {
                                     task.Table.Status = DataState.Error;
                                     reason = dest.GetLastError();
@@ -544,7 +524,7 @@ namespace JHWork.DataMigration.Runner.Integration
                 }
             });
 
-            if (task.Table.Status == DataState.Error) failReason = reason;
+            failReason = task.Table.Status == DataState.Error ? reason : "";
         }
 
         private JObject LoadAndDeserialize(string file)

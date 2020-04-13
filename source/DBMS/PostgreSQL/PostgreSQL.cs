@@ -66,25 +66,29 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        public bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        public bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             // 有数据
             if (data.Read())
             {
                 if (table.WriteMode == WriteModes.Append)
-                    BuildScriptWithDataTable(table, data, filter, ref script);
-                //BuildScriptWithInsertSQL(table, data, filter, ref script);
+                    BuildScriptWithDataTable(table, data, filter, out script);
+                //BuildScriptWithInsertSQL(table, data, filter, out script);
                 else
-                    BuildScriptWithMergeSQL(table, data, filter, ref script);
-                //BuildScriptWithUpdateSQL(table, data, filter, ref script);
+                    BuildScriptWithMergeSQL(table, data, filter, out script);
+                //BuildScriptWithUpdateSQL(table, data, filter, out script);
 
                 return true;
             }
+            else
+            {
+                script = null;
 
-            return false;
+                return false;
+            }
         }
 
-        protected void BuildScriptWithDataTable(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        protected void BuildScriptWithDataTable(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             // 创建数据表，字段清单与目标表须一致
             DataTable dt = new DataTable();
@@ -122,7 +126,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         }
 
         [Obsolete("此模式执行效率较低，请用 BuildScriptWithDataTable() 替代")]
-        protected void BuildScriptWithInsertSQL(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        protected void BuildScriptWithInsertSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
@@ -150,7 +154,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             script = sb.ToString();
         }
 
-        protected void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        protected void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
             string tmpTable = $"\"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}\"";
@@ -189,7 +193,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             sb.Append(" where B.").Append(field).Append(" is null");
 
-            BuildScriptWithDataTable(table, data, filter, ref script);
+            BuildScriptWithDataTable(table, data, filter, out script);
 
             script = new MergeScript()
             {
@@ -203,7 +207,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         }
 
         [Obsolete("此模式执行效率较低，请用 BuildScriptWithMergeSQL() 替代")]
-        protected void BuildScriptWithUpdateSQL(Table table, IDataWrapper data, IDataFilter filter, ref object script)
+        protected void BuildScriptWithUpdateSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             UpdateScript rst = new UpdateScript();
             StringBuilder sb = new StringBuilder();
@@ -325,8 +329,9 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        public bool ExecScript(Table table, object script, ref uint count)
+        public bool ExecScript(Table table, object script, out uint count)
         {
+            count = 0;
             try
             {
                 if (script is DataTable dt)
@@ -441,11 +446,9 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        public bool GetFieldNames(string tableName, ref string[] fieldNames)
+        public bool GetFieldNames(string tableName, out string[] fieldNames)
         {
-            IDataWrapper data = null;
-
-            if (Query($"select * from {ProcessTableName(tableName)} where 1 = 0", null, ref data))
+            if (Query($"select * from {ProcessTableName(tableName)} where 1 = 0", null, out IDataWrapper data))
                 try
                 {
                     fieldNames = data.GetFieldNames();
@@ -457,7 +460,11 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     data.Close();
                 }
             else
+            {
+                fieldNames = null;
+
                 return false;
+            }
         }
 
         private string GetFmtValue(object obj)
@@ -489,12 +496,11 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         public bool GetTables(IProgress progress, List<TableInfo> lst)
         {
             List<TableFK> fks = new List<TableFK>();
-            IDataWrapper data = null;
             int total = 0, position = 0;
 
             // 获取所有用户表清单
             if (Query("select tablename from pg_tables where schemaname = 'public' order by tablename asc", null,
-                ref data))
+                out IDataWrapper data))
                 try
                 {
                     while (data.Read())
@@ -514,7 +520,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
                 if (Query("select C.attname from pg_constraint A join pg_class B on A.conrelid = B.oid "
                     + "join pg_attribute C on C.attrelid = B.oid and ARRAY_POSITION(A.conkey, C.attnum) > 0 where "
-                    + $"B.relname = '{fk.Name}' and A.contype = 'p' order by C.attname asc", null, ref data))
+                    + $"B.relname = '{fk.Name}' and A.contype = 'p' order by C.attname asc", null, out data))
                 {
                     try
                     {
@@ -537,7 +543,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 if (Query("select A.relname from pg_class A "
                     + "join pg_constraint B on B.confrelid = A.oid and B.contype = 'f' "
                     + $"join pg_class C on C.oid = B.conrelid and C.relname = '{fk.Name}' "
-                    + "order by A.relname asc", null, ref data))
+                    + "order by A.relname asc", null, out data))
                 {
                     try
                     {
@@ -668,7 +674,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             return $"\"{tableName}\"";
         }
 
-        private bool Query(string sql, Dictionary<string, object> parms, ref IDataWrapper reader)
+        private bool Query(string sql, Dictionary<string, object> parms, out IDataWrapper reader)
         {
             try
             {
@@ -687,22 +693,23 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 errMsg = ex.Message;
                 Logger.WriteLogExcept(title, ex);
                 Logger.WriteLog(title, sql);
+                reader = null;
 
                 return false;
             }
 
         }
         public bool QueryCount(string tableName, string whereSQL, WithEnums with, Dictionary<string, object> parms,
-            ref ulong count)
+            out ulong count)
         {
-            IDataWrapper data = null;
             StringBuilder sb = new StringBuilder()
                 .Append("select count(*) as _row_count_ from ").Append(ProcessTableName(tableName));
 
             if (!string.IsNullOrEmpty(whereSQL))
                 sb.Append(" where ").Append(whereSQL);
 
-            if (Query(sb.ToString(), parms, ref data))
+            count = 0;
+            if (Query(sb.ToString(), parms, out IDataWrapper data))
                 try
                 {
                     if (data.Read())
@@ -714,8 +721,6 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                         else
                             count = (ulong)(int)o;
                     }
-                    else
-                        count = 0;
 
                     return true;
                 }
@@ -729,7 +734,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         }
 
         public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
-            ref IDataWrapper reader)
+            out IDataWrapper reader)
         {
             // 语法格式形如：
             // SELECT <fieldsSQL> FROM <tableName> {WHERE <whereSQL>}
@@ -745,16 +750,14 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
             sb.Append(" limit ").Append(toRow - fromRow + 1).Append(" offset ").Append(fromRow - 1);
 
-            return Query(sb.ToString(), parms, ref reader);
+            return Query(sb.ToString(), parms, out reader);
         }
 
         public bool QueryParam(string sql, Dictionary<string, object> parms)
         {
-            IDataWrapper data = null;
-
             if (!string.IsNullOrEmpty(sql))
             {
-                if (Query(sql, null, ref data))
+                if (Query(sql, null, out IDataWrapper data))
                     try
                     {
                         if (data.Read())

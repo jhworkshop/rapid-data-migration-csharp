@@ -194,7 +194,7 @@ namespace JHWork.DataMigration.Common
         /// <param name="dest">目标</param>
         /// <param name="tables">表清单</param>
         /// <param name="param">参数</param>
-        void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, ref string param);
+        void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, out string param);
 
         /// <summary>
         /// 保存示例配置

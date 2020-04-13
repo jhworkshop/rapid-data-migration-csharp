@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -169,7 +170,7 @@ namespace JHWork.DataMigration.Runner.Migration
             task.Name = $"{task.Source.DB} -> {task.Dest.DB}";
         }
 
-        private bool Connect(Database db, ref IDBMSReader reader)
+        private bool Connect(Database db, out IDBMSReader reader)
         {
             reader = DBMSFactory.GetDBMSReaderByName(db.DBMS);
             if (reader == null)
@@ -181,7 +182,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 return reader.Connect(db);
         }
 
-        private bool Connect(Database db, ref IDBMSWriter writer)
+        private bool Connect(Database db, out IDBMSWriter writer)
         {
             writer = DBMSFactory.GetDBMSWriterByName(db.DBMS);
             if (writer == null)
@@ -233,9 +234,7 @@ namespace JHWork.DataMigration.Runner.Migration
                                 new ParallelOptions() { MaxDegreeOfParallelism = (int)task.Threads },
                                 table =>
                                 {
-                                    string reason = "取消操作";
-
-                                    MigrateTable(task, table, ref reason);
+                                    MigrateTable(task, table, out string reason);
 
                                     if (table.Status == DataState.Done)
                                     {
@@ -281,7 +280,7 @@ namespace JHWork.DataMigration.Runner.Migration
             return JsonConvert.DeserializeObject(File.ReadAllText(file)) as JObject;
         }
 
-        public void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, ref string param)
+        public void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, out string param)
         {
             if (ins.Tasks[0] is MigrationTask task)
             {
@@ -293,16 +292,16 @@ namespace JHWork.DataMigration.Runner.Migration
 
                 param = task.Params;
             }
+            else
+                param = "";
         }
 
-        private void MigrateTable(MigrationTask task, MigrationTable table, ref string reason)
+        private void MigrateTable(MigrationTask task, MigrationTable table, out string reason)
         {
+            reason = "取消操作";
             if (status.IsStopped()) return;
 
-            IDBMSReader source = null;
-            IDBMSWriter dest = null;
-
-            if (Connect(task.Source, ref source) && Connect(task.Dest, ref dest))
+            if (Connect(task.Source, out IDBMSReader source) && Connect(task.Dest, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -311,11 +310,11 @@ namespace JHWork.DataMigration.Runner.Migration
                 try
                 {
                     // 迁移数据
-                    MigrateTableWithScript(task, table, parms, source, dest, ref reason);
+                    MigrateTableWithScript(task, table, parms, source, dest, out reason);
 
                     // 迁移后校验
                     if (table.Status != DataState.Error && !status.IsStopped())
-                        SummateTable(table, parms, source, dest, ref reason);
+                        SummateTable(table, parms, source, dest, out reason);
 
                     if (table.Status != DataState.Error && !status.IsStopped())
                     {
@@ -346,9 +345,9 @@ namespace JHWork.DataMigration.Runner.Migration
         }
 
         private void MigrateTableWithScript(MigrationTask task, MigrationTable table, Dictionary<string, object> parms,
-            IDBMSReader source, IDBMSWriter dest, ref string failReason)
+            IDBMSReader source, IDBMSWriter dest, out string failReason)
         {
-            List<object> scripts = new List<object>();
+            ConcurrentQueue<object> scripts = new ConcurrentQueue<object>();
             bool read = false;
             string reason = "";
 
@@ -370,18 +369,15 @@ namespace JHWork.DataMigration.Runner.Migration
 
                             if (status.IsStopped() || table.Status == DataState.Error) break;
 
-                            if (source.QueryPage(table, fromRow, toRow, WithEnums.NoLock, parms, ref data))
+                            if (source.QueryPage(table, fromRow, toRow, WithEnums.NoLock, parms, out data))
                                 try
                                 {
                                     object script = null;
 
                                     data.MapFields(table.DestFields);
-                                    while (dest.BuildScript(table, data, filter, ref script)
+                                    while (dest.BuildScript(table, data, filter, out script)
                                         && !status.IsStopped() && table.Status != DataState.Error)
-                                        lock (table)
-                                        {
-                                            scripts.Add(script);
-                                        }
+                                        scripts.Enqueue(script);
 
                                     // 获取不到预期的记录数，作最后一页处理
                                     if (data.ReadCount != task.ReadPages * table.PageSize || status.IsStopped()) break;
@@ -405,19 +401,11 @@ namespace JHWork.DataMigration.Runner.Migration
                     }
                     else if ("write".Equals(act))
                     {
-                        object script;
-                        uint r = 0;
-
                         while (table.Status != DataState.Error && (!read || scripts.Count > 0) && !status.IsStopped())
                             if (scripts.Count > 0)
                             {
-                                lock (table)
-                                {
-                                    script = scripts[0];
-                                    scripts.RemoveAt(0);
-                                }
-
-                                if (!dest.ExecScript(table, script, ref r))
+                                scripts.TryDequeue(out object script);
+                                if (!dest.ExecScript(table, script, out uint r))
                                 {
                                     table.Status = DataState.Error;
                                     reason = dest.GetLastError();
@@ -441,7 +429,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 }
             });
 
-            if (table.Status == DataState.Error) failReason = reason;
+            failReason = table.Status == DataState.Error ? reason : "";
         }
 
         public void Prefetch(Instance ins, IStopStatus status)
@@ -454,13 +442,10 @@ namespace JHWork.DataMigration.Runner.Migration
 
                 if (t is MigrationTask task)
                 {
-                    IDBMSReader source = null;
-                    IDBMSWriter dest = null;
-
                     task.Progress = 0;
                     task.Total = 0;
                     task.Status = DataState.Running;
-                    if (Connect(task.Source, ref source) && Connect(task.Dest, ref dest))
+                    if (Connect(task.Source, out IDBMSReader source) && Connect(task.Dest, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -497,19 +482,16 @@ namespace JHWork.DataMigration.Runner.Migration
             {
                 if ("read".Equals(act))
                 {
-                    string[] fields = null;
                     bool isError = true;
 
                     // #1: 检查表存在，并缓存字段
-                    if (source.GetFieldNames(table.SourceName, ref fields))
+                    if (source.GetFieldNames(table.SourceName, out string[] fields))
                     {
                         table.SourceFields = fields;
 
-                        ulong count = 0;
-
                         // #2: 获取待迁移记录数
                         if (source.QueryCount(table.SourceName, table.SourceWhereSQL, WithEnums.NoLock, parms,
-                            ref count))
+                            out ulong count))
                         {
                             table.Progress = 0;
                             task.Total += count;
@@ -521,9 +503,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 }
                 else if ("write".Equals(act))
                 {
-                    string[] fields = null;
-
-                    if (dest.GetFieldNames(table.DestName, ref fields))
+                    if (dest.GetFieldNames(table.DestName, out string[] fields))
                         table.DestFields = fields;
                     else
                         table.Status = DataState.Error;
@@ -633,7 +613,7 @@ namespace JHWork.DataMigration.Runner.Migration
         }
 
         private void SummateTable(MigrationTable table, Dictionary<string, object> parms, IDBMSReader source,
-            IDBMSWriter dest, ref string failReason)
+            IDBMSWriter dest, out string failReason)
         {
             ulong sourceCount = 0, destCount = 0;
             string reason = "";
@@ -643,7 +623,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 if ("read".Equals(act))
                 {
                     if (!source.QueryCount(table.SourceName, table.SourceWhereSQL, WithEnums.NoLock, parms,
-                        ref sourceCount))
+                        out sourceCount))
                     {
                         table.Status = DataState.Error;
                         reason = source.GetLastError();
@@ -652,7 +632,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 else if ("write".Equals(act))
                 {
                     if (!dest.QueryCount(table.DestName, table.DestWhereSQL, WithEnums.NoLock, parms,
-                        ref destCount))
+                        out destCount))
                     {
                         table.Status = DataState.Error;
                         reason = dest.GetLastError();
