@@ -146,25 +146,23 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
                 string field = ProcessFieldName(table.KeyFields[0]);
 
-                sb.Append("MERGE INTO ").Append(destTable).Append(" A USING ").Append(tmpTable).Append(" B ON A.")
-                    .Append(field).Append(" = B.").Append(field);
+                sb.Append($"MERGE INTO {destTable} A USING {tmpTable} B ON A.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     field = ProcessFieldName(table.KeyFields[i]);
-                    sb.Append(" AND A.").Append(field).Append(" = B.").Append(field);
+                    sb.Append($" AND A.{field} = B.{field}");
                 }
                 field = ProcessFieldName(fields[0]);
-                sb.AppendLine().Append(" WHEN MATCHED THEN UPDATE SET A.").Append(field).Append(" = B.").Append(field);
+                sb.AppendLine().Append($" WHEN MATCHED THEN UPDATE SET A.{field} = B.{field}");
                 for (int i = 1; i < fields.Length; i++)
                 {
                     field = ProcessFieldName(fields[i]);
-                    sb.Append(", A.").Append(field).Append(" = B.").Append(field);
+                    sb.Append($", A.{field} = B.{field}");
                 }
 
                 fields = ExcludeFields(table.DestFields, table.SkipFields);
-                sb.AppendLine().Append(" WHEN NOT MATCHED THEN INSERT (").Append(ProcessFieldNames(fields))
-                    .Append(") VALUES (").Append(ProcessFieldNames(fields, "B"));
-                sb.Append(");"); // 语句以分号结尾
+                sb.AppendLine().Append($" WHEN NOT MATCHED THEN INSERT ({ProcessFieldNames(fields)}")
+                    .Append($") VALUES ({ProcessFieldNames(fields, "B")});"); // 语句以分号结尾
 
                 mergeSQL = sb.ToString();
                 mergeSQL2 = "";
@@ -175,19 +173,18 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
                 string field = ProcessFieldName(fields[0]);
 
-                sb.Append("UPDATE ").Append(destTable).Append(" SET ").Append(field).Append(" = B.").Append(field);
+                sb.Append($"UPDATE {destTable} SET {field} = B.{field}");
                 for (int i = 1; i < fields.Length; i++)
                 {
                     field = ProcessFieldName(fields[i]);
-                    sb.Append(", ").Append(field).Append(" = B.").Append(field);
+                    sb.Append($", {field} = B.{field}");
                 }
                 field = ProcessFieldName(table.KeyFields[0]);
-                sb.Append(" FROM ").Append(tmpTable).Append(" B WHERE ")
-                    .Append(destTable).Append(".").Append(field).Append(" = B.").Append(field);
+                sb.Append($" FROM {tmpTable} B WHERE {destTable}.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     field = ProcessFieldName(table.KeyFields[i]);
-                    sb.Append(" AND ").Append(destTable).Append(".").Append(field).Append(" = B.").Append(field);
+                    sb.Append($" AND {destTable}.{field} = B.{field}");
                 }
 
                 mergeSQL = sb.ToString();
@@ -195,16 +192,15 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 fields = ExcludeFields(table.DestFields, table.SkipFields);
                 sb.Length = 0;
                 field = ProcessFieldName(table.KeyFields[0]);
-                sb.Append("INSERT INTO ").Append(destTable).Append(" (").Append(ProcessFieldNames(fields))
-                    .Append(") SELECT ").Append(ProcessFieldNames(fields, "A")).Append(" FROM ").Append(tmpTable)
-                    .Append(" A LEFT JOIN ").Append(destTable).Append(" B ON A.").Append(field).Append(" = B.")
-                    .Append(field);
+                sb.Append($"INSERT INTO {destTable} ({ProcessFieldNames(fields)}) SELECT")
+                    .Append($" {ProcessFieldNames(fields, "A")} FROM {tmpTable} A LEFT JOIN {destTable} B ON")
+                    .Append($"A.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     field = ProcessFieldName(table.KeyFields[i]);
-                    sb.Append(" AND A.").Append(field).Append(" = B.").Append(field);
+                    sb.Append($" AND A.{field} = B.{field}");
                 }
-                sb.Append(" WHERE B.").Append(field).Append(" IS NULL");
+                sb.Append($" WHERE B.{field} IS NULL");
 
                 mergeSQL2 = sb.ToString();
             }
@@ -228,19 +224,16 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
 
             data.MapFields(fields);
-            sb.Append("UPDATE ").Append(ProcessTableName(table.DestName)).Append(" SET ")
-                .Append(ProcessFieldName(fields[0])).Append(" = ")
-                .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+            sb.Append($"UPDATE {ProcessTableName(table.DestName)} SET {ProcessFieldName(fields[0])}")
+                .Append($" = {GetFmtValue(filter.GetValue(data, 0, fields[0]))}");
             for (int i = 1; i < fields.Length; i++)
-                sb.Append(", ").Append(ProcessFieldName(fields[i])).Append(" = ")
-                    .Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
+                sb.Append($", {ProcessFieldName(fields[i])} = {GetFmtValue(filter.GetValue(data, i, fields[i]))}");
 
             data.MapFields(table.KeyFields);
-            sb.Append(" WHERE ")
-                .Append(ProcessFieldName(table.KeyFields[0])).Append(" = ")
+            sb.Append($" WHERE {ProcessFieldName(table.KeyFields[0])} = ")
                 .Append(GetFmtValue(filter.GetValue(data, 0, table.KeyFields[0])));
             for (int i = 1; i < table.KeyFields.Length; i++)
-                sb.Append(" AND ").Append(ProcessFieldName(table.KeyFields[i])).Append(" = ")
+                sb.Append($" AND {ProcessFieldName(table.KeyFields[i])} = ")
                     .Append(GetFmtValue(filter.GetValue(data, i, table.KeyFields[i])));
 
             rst.UpdateSQL = sb.ToString();
@@ -248,8 +241,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             fields = ExcludeFields(table.DestFields, table.SkipFields);
             data.MapFields(fields);
             sb.Length = 0;
-            sb.Append("INSERT INTO ").Append(ProcessTableName(table.DestName)).Append(" (")
-                .Append(ProcessFieldNames(fields)).Append(") VALUES (")
+            sb.Append($"INSERT INTO {ProcessTableName(table.DestName)} ({ProcessFieldNames(fields)}) VALUES (")
                 .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)
                 sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
@@ -327,9 +319,9 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         private bool EnableIdentityInsert(string tableName, bool status)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("IF EXISTS(SELECT 1 FROM sysobjects WHERE name = '").Append(tableName)
-                .Append("' AND OBJECTPROPERTY(id, 'TableHasIdentity') = 1) SET IDENTITY_INSERT ")
-                .Append(ProcessTableName(tableName)).Append(status ? " ON" : " OFF");
+                .Append($"IF EXISTS(SELECT 1 FROM sysobjects WHERE name = '{tableName}'")
+                .Append(" AND OBJECTPROPERTY(id, 'TableHasIdentity') = 1) SET IDENTITY_INSERT ")
+                .Append($"{ProcessTableName(tableName)} ").Append(status ? "ON" : "OFF");
 
             return Execute(sb.ToString(), null, out _);
         }
@@ -583,8 +575,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             foreach (TableFK fk in fks)
             {
                 if (Query("SELECT C.name FROM sysconstraints A JOIN sysforeignkeys B ON A.constid = B.constid"
-                    + " JOIN sysobjects C ON C.type = 'U' AND C.id = B.rkeyid WHERE A.id = OBJECT_ID('"
-                    + fk.Name + "')", null, out data))
+                    + $" JOIN sysobjects C ON C.type = 'U' AND C.id = B.rkeyid WHERE A.id = OBJECT_ID('{fk.Name}')",
+                    null, out data))
                 {
                     try
                     {
@@ -605,23 +597,27 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     fk.Order = order;
 
             order += 100;
-            while (order < 10000)
+            while (order <= 10000) // 设定一个级别上限：100 级
             {
                 int left = 0;
+                List<TableFK> lastList = new List<TableFK>();
+
+                // 创建上一轮次的结果清单
+                foreach (TableFK fk in fks)
+                    if (fk.Order > 0) lastList.Add(fk);
 
                 foreach (TableFK fk in fks)
                     if (fk.Order == 0)
                     {
-                        left++;
-
                         bool done = true;
 
+                        // 检查是否所有外键指向表都在上一轮清单里面
                         foreach (string s in fk.FKs)
                         {
                             bool found = false;
 
-                            foreach (TableFK fk2 in fks)
-                                if (fk2.Name.Equals(s) && fk2.Order > 0)
+                            foreach (TableFK fk2 in lastList)
+                                if (fk2.Name.Equals(s))
                                 {
                                     found = true;
                                     break;
@@ -633,8 +629,10 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                                 break;
                             }
                         }
-
-                        if (done) fk.Order = order;
+                        if (done)
+                            fk.Order = order;
+                        else
+                            left++;
                     }
 
                 if (left == 0) break;
@@ -714,7 +712,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        private string ProcessTableName(string tableName, WithEnums with = WithEnums.None)
+        private string ProcessTableName(string tableName, WithEnums with = WithEnums.None, string prefix = "")
         {
             if (string.IsNullOrEmpty(tableName))
                 return "";
@@ -722,6 +720,9 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             {
                 if (!tableName.StartsWith("["))
                     tableName = $"[{tableName}]";
+
+                if (!string.IsNullOrEmpty(prefix))
+                    tableName += prefix;
 
                 string s = "";
 
@@ -801,29 +802,53 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
             if (Version.Parse(conn.ServerVersion).Major >= 10) // 2008 或更新版本
             {
-                // SELECT <fieldsSQL> FROM (SELECT ROW_NUMBER() OVER (ORDER BY 
-                // <orderSQL>) AS '_RowNum_', <fieldsSQL> FROM
-                // <tableName>
+                // SELECT <fieldsSQL> FROM (SELECT ROW_NUMBER() OVER (ORDER BY <orderSQL>)
+                // AS '_RowNum_', <fieldsSQL> FROM <tableName>
                 // {WHERE <whereSQL>}
                 // ) A WHERE A.[_RowNum_] BETWEEN <fromRow> AND <toRow>
                 // ORDER BY <orderSQL> -- 如果添加排序，则性能将受影响
-                string fieldsSQL = ProcessFieldNames(table.SourceFields);
+                // 如果主键字段只有一个，可以优化如下：
+                // SELECT <B.fieldsSQL> FROM <tableName> B JOIN (SELECT MIN(<keyFields>) AS '_MinKey_',
+                // MAX(<keyFields>) AS '_MaxKey' FROM (SELECT <keyFields>, ROW_NUMBER OVER
+                // (ORDER BY <orderSQL>) AS '_RowNum_' FROM <tableName>
+                // {WHERE <whereSQL>})
+                // A WHERE A.[_RowNum_] BETWEEN <fromRow> AND <toRow>) A
+                // ON <B.keyFields> BETWEEN A.[_MinKey_] AND A.[_MaxKey]
+                if (table.KeyFields.Length == 1)
+                {
+                    string tableNameWith = ProcessTableName(table.SourceName, with);
+                    string tableNameWithB = ProcessTableName(table.SourceName, with, "B");
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
+                    string keyField = ProcessFieldName(table.KeyFields[0]);
 
-                sb.Append("SELECT ").Append(fieldsSQL).Append(" FROM (SELECT ROW_NUMBER() OVER (ORDER BY ")
-                    .Append(table.OrderSQL).Append(") AS '_RowNum_', ").Append(fieldsSQL).Append(" FROM ")
-                    .Append(ProcessTableName(table.SourceName, with));
+                    sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT MIN({keyField}) AS '_MinKey_',")
+                        .Append($" MAX({keyField}) AS '_MaxKey' FROM (SELECT {keyField}, ROW_NUMBER() OVER")
+                        .Append($" (ORDER BY {table.OrderSQL}) AS '_RowNum_' FROM {tableNameWith}");
 
-                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                    sb.Append(" WHERE ").Append(table.SourceWhereSQL);
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append($" WHERE {table.SourceWhereSQL}");
 
-                sb.Append(") A WHERE [A].[_RowNum_] BETWEEN ").Append(fromRow).Append(" AND ").Append(toRow);
+                    sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}) A")
+                        .Append($" ON B.{keyField} BETWEEN A.[_MinKey_] AND A.[_MaxKey]");
+                }
+                else
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
+
+                    sb.Append($"SELECT {fieldsSQL} FROM (SELECT ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
+                        .Append($" AS '_RowNum_', {fieldsSQL} FROM {ProcessTableName(table.SourceName, with)}");
+
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append($" WHERE {table.SourceWhereSQL}");
+
+                    sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}");
+                }
             }
             else
             {
                 // 此语法要求 whereSQL、orderSQL 包含表名前缀，如：MyTable.KeyField ASC
-                // SELECT TOP <toRow - fromRow + 1> <tableName.fieldsSQL> FROM
-                // <tableNameWith> LEFT JOIN (SELECT TOP <fromRow - 1>
-                // <keyFieldsSQL> FROM <tableNameWith>
+                // SELECT TOP <toRow - fromRow + 1> <tableName.fieldsSQL> FROM <tableNameWith>
+                // LEFT JOIN (SELECT TOP <fromRow - 1> <keyFieldsSQL> FROM <tableNameWith>
                 // {WHERE <whereSQL>}
                 // ORDER BY <orderSQL>) B ON
                 // <tableName.keyFields> = <B.keyFields>
@@ -834,26 +859,26 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 string keyFieldsSQL = ProcessFieldNames(table.KeyFields);
                 string tableName = ProcessTableName(table.SourceName);
                 string tableNameWith = ProcessTableName(table.SourceName, with);
-                
-                sb.Append("SELECT TOP ").Append(toRow - fromRow + 1).Append(" ").Append(fieldsSQL).Append(" FROM ")
-                    .Append(tableNameWith).Append(" LEFT JOIN (SELECT TOP ").Append(fromRow - 1).Append(" ")
-                    .Append(keyFieldsSQL).Append(" FROM ").Append(tableNameWith);
-                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                    sb.Append(" WHERE ").Append(table.SourceWhereSQL);
-                sb.Append(" ORDER BY ").Append(table.OrderSQL).Append(") B ON ");
-
                 string keyField = ProcessFieldName(table.KeyFields[0]);
 
-                sb.Append(tableName).Append(".").Append(keyField).Append(" = ").Append("B.").Append(keyField);
+                sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableNameWith}")
+                    .Append($" LEFT JOIN (SELECT TOP {fromRow - 1} {keyFieldsSQL} FROM {tableNameWith}");
+
+                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                    sb.Append($" WHERE {table.SourceWhereSQL}");
+
+                sb.Append($" ORDER BY {table.OrderSQL}) B ON ").Append($"{tableName}.{keyField} = B.{keyField}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     keyField = ProcessFieldName(table.KeyFields[i]);
-                    sb.Append(tableName).Append(".").Append(keyField).Append(" = ").Append("B.").Append(keyField);
+                    sb.Append($" AND {tableName}.{keyField} = B.{keyField}");
                 }
-                sb.Append(" WHERE B.").Append(keyField).Append(" IS NULL");
+                sb.Append($" WHERE B.{keyField} IS NULL");
+
                 if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                    sb.Append(" AND ").Append(table.SourceWhereSQL);
-                sb.Append(" ORDER BY ").Append(table.OrderSQL);
+                    sb.Append($" AND {table.SourceWhereSQL}");
+
+                sb.Append($" ORDER BY {table.OrderSQL}");
             }
 
             return Query(sb.ToString(), parms, out reader);

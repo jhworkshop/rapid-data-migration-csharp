@@ -99,9 +99,9 @@ namespace JHWork.DataMigration
 
             Parallel.ForEach(profile.Instances, new ParallelOptions() { MaxDegreeOfParallelism = (int)profile.Threads },
                 ins =>
-                {
-                    profile.Executor.Execute(ins, this);
-                });
+            {
+                profile.Executor.Execute(ins, this);
+            });
         }
 
         private void RunTimes(Profile profile)

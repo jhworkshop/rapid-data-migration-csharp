@@ -56,6 +56,18 @@ namespace JHWork.DataMigration.DBMS.MySQL
         }
 
         /// <summary>
+        /// 写入指定字符
+        /// </summary>
+        /// <param name="c">字符</param>
+        /// <returns>本实例</returns>
+        public FileStreamWriter Append(char c)
+        {
+            writer.Write(c);
+
+            return this;
+        }
+
+        /// <summary>
         /// 写入指定内容
         /// </summary>
         /// <param name="s">内容</param>
@@ -149,16 +161,17 @@ namespace JHWork.DataMigration.DBMS.MySQL
             data.MapFields(fields);
             try
             {
-                fc.Append(GetCSVValue(filter.GetValue(data, 0, fields[0])));
+                // 每行最后增加一个逗号分隔符，以免最后一个字段是字符串时解析有误
+                fc.Append(GetCSVValue(filter.GetValue(data, 0, fields[0]))).Append(',');
                 for (int i = 1; i < fields.Length; i++)
-                    fc.Append(",").Append(GetCSVValue(filter.GetValue(data, i, fields[i])));
+                    fc.Append(GetCSVValue(filter.GetValue(data, i, fields[i]))).Append(',');
 
                 int r = 1;
                 while (r < table.PageSize && data.Read())
                 {
-                    fc.AppendLine().Append(GetCSVValue(filter.GetValue(data, 0, fields[0])));
+                    fc.AppendLine().Append(GetCSVValue(filter.GetValue(data, 0, fields[0]))).Append(',');
                     for (int i = 1; i < fields.Length; i++)
-                        fc.Append(",").Append(GetCSVValue(filter.GetValue(data, i, fields[i])));
+                        fc.Append(GetCSVValue(filter.GetValue(data, i, fields[i]))).Append(',');
 
                     r++;
                 }
@@ -414,7 +427,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             return errMsg;
         }
 
-        public virtual string GetName()
+        public string GetName()
         {
             return "MySQL";
         }
@@ -504,23 +517,27 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     fk.Order = order;
 
             order += 100;
-            while (order < 10000)
+            while (order <= 10000) // 设定一个级别上限：100 级
             {
                 int left = 0;
+                List<TableFK> lastList = new List<TableFK>();
+
+                // 创建上一轮次的结果清单
+                foreach (TableFK fk in fks)
+                    if (fk.Order > 0) lastList.Add(fk);
 
                 foreach (TableFK fk in fks)
                     if (fk.Order == 0)
                     {
-                        left++;
-
                         bool done = true;
 
+                        // 检查是否所有外键指向表都在上一轮清单里面
                         foreach (string s in fk.FKs)
                         {
                             bool found = false;
 
-                            foreach (TableFK fk2 in fks)
-                                if (fk2.Name.Equals(s) && fk2.Order > 0)
+                            foreach (TableFK fk2 in lastList)
+                                if (fk2.Name.Equals(s))
                                 {
                                     found = true;
                                     break;
@@ -532,8 +549,10 @@ namespace JHWork.DataMigration.DBMS.MySQL
                                 break;
                             }
                         }
-
-                        if (done) fk.Order = order;
+                        if (done)
+                            fk.Order = order;
+                        else
+                            left++;
                     }
 
                 if (left == 0) break;
@@ -726,17 +745,6 @@ namespace JHWork.DataMigration.DBMS.MySQL
             {
                 trans = null;
             }
-        }
-    }
-
-    /// <summary>
-    /// MariaDB
-    /// </summary>
-    public class MariaDB : MySQL
-    {
-        public override string GetName()
-        {
-            return "MariaDB";
         }
     }
 }

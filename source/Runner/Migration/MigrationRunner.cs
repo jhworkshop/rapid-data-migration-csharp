@@ -146,6 +146,8 @@ namespace JHWork.DataMigration.Runner.Migration
                 for (int i = 0; i < task.Tables.Length; i++)
                     task.Tables[i] = rstBuf[i].ToArray();
             }
+            else
+                task.Tables = new MigrationTable[][] { };
         }
 
         private void AnalyseTask(JObject obj, string db, MigrationTask task, string path)
@@ -231,25 +233,24 @@ namespace JHWork.DataMigration.Runner.Migration
                             if (status.IsStopped()) break;
 
                             Parallel.ForEach(task.Tables[i],
-                                new ParallelOptions() { MaxDegreeOfParallelism = (int)task.Threads },
-                                table =>
-                                {
-                                    MigrateTable(task, table, out string reason);
+                                new ParallelOptions() { MaxDegreeOfParallelism = (int)task.Threads }, table =>
+                            {
+                                MigrateTable(task, table, out string reason);
 
-                                    if (table.Status == DataState.Done)
-                                    {
-                                        Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移成功。");
-                                        Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "成功", reason);
-                                    }
-                                    else
-                                    {
-                                        task.Status = DataState.Error;
-                                        task.Progress -= table.Progress;
-                                        Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}",
-                                            $"迁移失败！{reason}");
-                                        Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "失败", reason);
-                                    }
-                                });
+                                if (table.Status == DataState.Done)
+                                {
+                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移成功。");
+                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "成功", reason);
+                                }
+                                else
+                                {
+                                    task.Status = DataState.Error;
+                                    task.Progress -= table.Progress;
+                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}",
+                                        $"迁移失败！{reason}");
+                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "失败", reason);
+                                }
+                            });
                         }
 
                         if (status.IsStopped())
@@ -546,8 +547,8 @@ namespace JHWork.DataMigration.Runner.Migration
                     ["whereSQL"] = t.SourceWhereSQL,
                     ["pageSize"] = t.PageSize,
                     ["mode"] = t.WriteMode == WriteModes.Append ? "Append" : "Update",
-                    ["keyFields"] = string.Join(",", t.KeyFields),
-                    ["skipFields"] = string.Join(",", t.SkipFields),
+                    ["keyFields"] = t.KeyFields == null ? "" : string.Join(",", t.KeyFields),
+                    ["skipFields"] = t.SkipFields == null ? "" : string.Join(",", t.SkipFields),
                     ["filter"] = t.Filter
                 };
 

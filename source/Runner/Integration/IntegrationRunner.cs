@@ -251,36 +251,36 @@ namespace JHWork.DataMigration.Runner.Integration
 
                     Parallel.ForEach(tasks, new ParallelOptions() { MaxDegreeOfParallelism = (int)instance.Threads },
                         task =>
+                    {
+                        task.StartTick = WinAPI.GetTickCount();
+                        task.Status = DataState.Running;
+                        try
                         {
-                            task.StartTick = WinAPI.GetTickCount();
-                            task.Status = DataState.Running;
-                            try
-                            {
-                                IntegrateTable(task, out string reason);
+                            IntegrateTable(task, out string reason);
 
-                                if (task.Table.Status == DataState.Done)
-                                {
-                                    task.Status = DataState.Done;
-                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}", "汇集成功。");
-                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "成功",
-                                        task.Table.Progress.ToString("#,##0"));
-                                }
-                                else
-                                {
-                                    task.Status = DataState.Error;
-                                    task.Progress -= task.Table.Progress;
-                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}",
-                                        $"汇集失败！{reason}");
-                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "失败", reason);
-                                }
+                            if (task.Table.Status == DataState.Done)
+                            {
+                                task.Status = DataState.Done;
+                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}", "汇集成功。");
+                                Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "成功",
+                                    task.Table.Progress.ToString("#,##0"));
                             }
-                            catch (Exception ex)
+                            else
                             {
                                 task.Status = DataState.Error;
-                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", $"汇集失败！{ex.Message}");
+                                task.Progress -= task.Table.Progress;
+                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}",
+                                    $"汇集失败！{reason}");
+                                Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "失败", reason);
                             }
-                            task.StartTick = WinAPI.GetTickCount() - task.StartTick;
-                        });
+                        }
+                        catch (Exception ex)
+                        {
+                            task.Status = DataState.Error;
+                            Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", $"汇集失败！{ex.Message}");
+                        }
+                        task.StartTick = WinAPI.GetTickCount() - task.StartTick;
+                    });
 
                 }
             }
@@ -562,8 +562,8 @@ namespace JHWork.DataMigration.Runner.Integration
                     ["whereSQL"] = t.SourceWhereSQL,
                     ["pageSize"] = t.PageSize,
                     ["mode"] = t.WriteMode == WriteModes.Append ? "Append" : "Update",
-                    ["keyFields"] = string.Join(",", t.KeyFields),
-                    ["skipFields"] = string.Join(",", t.SkipFields),
+                    ["keyFields"] = t.KeyFields == null ? "" : string.Join(",", t.KeyFields),
+                    ["skipFields"] = t.SkipFields == null ? "" : string.Join(",", t.SkipFields),
                     ["filter"] = t.Filter
                 };
 

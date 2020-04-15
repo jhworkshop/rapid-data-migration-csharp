@@ -564,23 +564,27 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     fk.Order = order;
 
             order += 100;
-            while (order < 10000)
+            while (order < 10000) // 设定一个级别上限：100 级
             {
                 int left = 0;
+                List<TableFK> lastList = new List<TableFK>();
+
+                // 创建上一轮次的结果清单
+                foreach (TableFK fk in fks)
+                    if (fk.Order > 0) lastList.Add(fk);
 
                 foreach (TableFK fk in fks)
                     if (fk.Order == 0)
                     {
-                        left++;
-
                         bool done = true;
 
+                        // 检查是否所有外键指向表都在上一轮清单里面
                         foreach (string s in fk.FKs)
                         {
                             bool found = false;
 
-                            foreach (TableFK fk2 in fks)
-                                if (fk2.Name.Equals(s) && fk2.Order > 0)
+                            foreach (TableFK fk2 in lastList)
+                                if (fk2.Name.Equals(s))
                                 {
                                     found = true;
                                     break;
@@ -592,8 +596,10 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                                 break;
                             }
                         }
-
-                        if (done) fk.Order = order;
+                        if (done)
+                            fk.Order = order;
+                        else
+                            left++;
                     }
 
                 if (left == 0) break;
