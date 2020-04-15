@@ -807,13 +807,22 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // {WHERE <whereSQL>}
                 // ) A WHERE A.[_RowNum_] BETWEEN <fromRow> AND <toRow>
                 // ORDER BY <orderSQL> -- 如果添加排序，则性能将受影响
-                // 如果主键字段只有一个，可以优化如下：
+                //
+                // 如果存在主键，可以优化为：
+                // SELECT <B.fieldsSQL> FROM <tableName> B JOIN (SELECT <keyFields> FROM
+                // (SELECT <keyFields>, ROW_NUMBER() OVER (ORDER BY <orderSQL>) AS '_RowNum_'
+                // FROM <tableName>
+                // {WHERE <whereSQL>}
+                // ) A WHERE [_RowNum_] BETWEEN <fromRow> AND <toRow>) A ON <B.keyFields> = <A.keyFields>
+                //
+                // 如果主键字段只有一个，可以进一步优化为：
                 // SELECT <B.fieldsSQL> FROM <tableName> B JOIN (SELECT MIN(<keyFields>) AS '_MinKey_',
                 // MAX(<keyFields>) AS '_MaxKey' FROM (SELECT <keyFields>, ROW_NUMBER OVER
                 // (ORDER BY <orderSQL>) AS '_RowNum_' FROM <tableName>
                 // {WHERE <whereSQL>})
                 // A WHERE A.[_RowNum_] BETWEEN <fromRow> AND <toRow>) A
                 // ON <B.keyFields> BETWEEN A.[_MinKey_] AND A.[_MaxKey]
+                // {WHERE <whereSQL>})
                 if (table.KeyFields.Length == 1)
                 {
                     string tableNameWith = ProcessTableName(table.SourceName, with);
@@ -830,6 +839,32 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                     sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}) A")
                         .Append($" ON B.{keyField} BETWEEN A.[_MinKey_] AND A.[_MaxKey]");
+
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append($" WHERE {table.SourceWhereSQL}");
+                }
+                else if (table.KeyFields.Length > 1)
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
+                    string tableName = ProcessTableName(table.SourceName, with);
+                    string tableNameWithB = ProcessTableName(table.SourceName, with, "B");
+                    string keyFields = ProcessFieldNames(table.KeyFields);
+                    string keyField = ProcessFieldName(table.KeyFields[0]);
+
+                    sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT {keyFields} FROM")
+                        .Append($" (SELECT {keyFields}, ROW_NUMBER() OVER (ORDER BY {table.OrderSQL}) AS '_RowNum_'")
+                        .Append($" FROM {tableName}");
+
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append($" WHERE {table.SourceWhereSQL}");
+
+                    sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}) A ON B.{keyField} = A.{keyField}");
+
+                    for (int i = 1; i < table.KeyFields.Length; i++)
+                    {
+                        keyField = ProcessFieldName(table.KeyFields[i]);
+                        sb.Append($" AND B.{keyField} = A.{keyField}");
+                    }
                 }
                 else
                 {
