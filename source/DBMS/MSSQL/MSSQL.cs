@@ -802,6 +802,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
             if (Version.Parse(conn.ServerVersion).Major >= 10) // 2008 或更新版本
             {
+                // 语法格式形如：
                 // SELECT <fieldsSQL> FROM (SELECT ROW_NUMBER() OVER (ORDER BY <orderSQL>)
                 // AS '_RowNum_', <fieldsSQL> FROM <tableName>
                 // {WHERE <whereSQL>}

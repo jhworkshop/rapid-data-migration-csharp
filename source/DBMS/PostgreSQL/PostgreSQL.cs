@@ -739,24 +739,138 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         }
 
+        private bool QueryMaxKey(string sql, Dictionary<string, object> parms, out object value)
+        {
+            if (Query(sql, parms, out IDataWrapper data))
+                try
+                {
+                    if (data.Read())
+                    {
+                        value = data.GetValue(0);
+
+                        return true;
+                    }
+                }
+                finally
+                {
+                    data.Close();
+                }
+
+            value = null;
+            return false;
+        }
+
         public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
             out IDataWrapper reader)
         {
+            StringBuilder sb = new StringBuilder();
+            string tableName = ProcessTableName(table.SourceName);
+
             // 语法格式形如：
-            // SELECT <fieldsSQL> FROM <tableName> {WHERE <whereSQL>}
-            // {ORDER BY <orderSQL>} LIMIT <toRow - fromRow + 1> OFFSET <fromRow - 1>
-            string fieldsSQL = ProcessFieldNames(table.SourceFields);
-            StringBuilder sb = new StringBuilder()
-                .Append("select ").Append(fieldsSQL).Append(" from ").Append(ProcessTableName(table.SourceName));
+            // select <fieldsSQL> from <tableName> {where <whereSQL>}
+            // {order by <orderSQL>} limit <toRow - fromRow + 1> offset <fromRow - 1>
+            //
+            // 如果存在主键，可以优化为：
+            // select <A.fieldsSQL> from <tableName> A join (select <keyFields> from <tableName> {where <whereSQL>}
+            // {order by <orderSQL>} limit <toRow - fromRow + 1> offset <fromRow - 1>) B on <A.keyFields> = <B.keyFields>
+            //
+            // 如果主键字段只有一个，可以进一步优化为：
+            // select <A.fieldsSQL> from <tableName> A join (select <keyField> from <tableName>
+            // {where {<keyField> > @LastMaxKey} {and {<whereSQL>}} order by <keyField> asc
+            // limit <toRow - fromRow + 1>) B on A.<keyField> = B.<keyField>
+            // 其中
+            // @LastMaxKey = select max(<keyField>) as "_MaxKey_" from (select <keyField> from <tableName>
+            // {where {<keyField> > @LastMaxKey} {and {<whereSQL>}}} order by <keyField> asc
+            // limit <toRow - fromRow + 1>) A
+            if (table.KeyFields.Length == 1)
+            {
+                string keyField = ProcessFieldName(table.KeyFields[0]);
 
-            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                sb.Append(" where ").Append(table.SourceWhereSQL);
-            if (!string.IsNullOrEmpty(table.OrderSQL))
-                sb.Append(" order by ").Append(table.OrderSQL);
+                // 查询最大键值
+                sb.Append($"select max({keyField}) as \"_MaxKey_\" from (select {keyField} from {tableName}");
+                if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
+                {
+                    sb.Append(" where ");
+                    if (parms.ContainsKey("LastMaxKey"))
+                    {
+                        sb.Append($"{keyField} > @LastMaxKey");
+                        if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                            sb.Append(" and ").Append(table.SourceWhereSQL);
+                    }
+                    else
+                        sb.Append(table.SourceWhereSQL);
+                }
+                if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" order by {table.OrderSQL}");
+                sb.Append($" limit {toRow - fromRow + 1}) A");
 
-            sb.Append(" limit ").Append(toRow - fromRow + 1).Append(" offset ").Append(fromRow - 1);
+                if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
 
-            return Query(sb.ToString(), parms, out reader);
+                    sb.Length = 0;
+                    sb.Append($"select {fieldsSQL} from {tableName} A join (select {keyField} from {tableName}");
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
+                    {
+                        sb.Append(" where ");
+                        if (parms.ContainsKey("LastMaxKey"))
+                        {
+                            sb.Append($"{keyField} > @LastMaxKey");
+                            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                                sb.Append(" and ").Append(table.SourceWhereSQL);
+                        }
+                        else
+                            sb.Append(table.SourceWhereSQL);
+                    }
+                    if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" order by {table.OrderSQL}");
+                    sb.Append($" limit {toRow - fromRow + 1}) B on A.{keyField} = B.{keyField}");
+
+                    bool rst = Query(sb.ToString(), parms, out reader);
+
+                    parms["LastMaxKey"] = maxValue;
+
+                    return rst;
+                }
+                else
+                {
+                    reader = null;
+
+                    return false;
+                }
+            }
+            else
+            {
+                if (table.KeyFields.Length > 0)
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
+                    string keyField = ProcessFieldName(table.KeyFields[0]);
+                    string keyFields = ProcessFieldNames(table.KeyFields);
+
+                    sb.Append($"select {fieldsSQL} from {tableName} A join (select {keyFields} from {tableName}");
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append(" where ").Append(table.SourceWhereSQL);
+                    if (!string.IsNullOrEmpty(table.OrderSQL))
+                        sb.Append(" order by ").Append(table.OrderSQL);
+                    sb.Append($" limit {toRow - fromRow + 1} offset {fromRow - 1}) B on A.{keyField} = B.{keyField}");
+                    for (int i = 1; i < table.KeyFields.Length; i++)
+                    {
+                        keyField = ProcessFieldName(table.KeyFields[i]);
+                        sb.Append($" and A.{keyField} = B.{keyField}");
+                    }
+                }
+                else
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
+
+                    sb.Append($"select {fieldsSQL} from {tableName}");
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append(" where ").Append(table.SourceWhereSQL);
+                    if (!string.IsNullOrEmpty(table.OrderSQL))
+                        sb.Append(" order by ").Append(table.OrderSQL);
+                    sb.Append($" limit {toRow - fromRow + 1} offset {fromRow - 1}");
+                }
+
+                return Query(sb.ToString(), parms, out reader);
+            }
         }
 
         public bool QueryParam(string sql, Dictionary<string, object> parms)

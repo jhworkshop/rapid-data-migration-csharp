@@ -3,6 +3,7 @@ using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text;
 
 namespace JHWork.DataMigration.DBMS.MySQL
@@ -592,6 +593,27 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
         }
 
+        private string ProcessFieldNames(string[] fields, string prefix = "")
+        {
+            if (fields == null || fields.Length == 0)
+                return "";
+            else
+            {
+                if (prefix == null)
+                    prefix = "";
+                else if (prefix.Length > 0)
+                    prefix += ".";
+
+                StringBuilder sb = new StringBuilder();
+
+                sb.Append(prefix).Append(ProcessFieldName(fields[0]));
+                for (int i = 1; i < fields.Length; i++)
+                    sb.Append(", ").Append(prefix).Append(ProcessFieldName(fields[i]));
+
+                return sb.ToString();
+            }
+        }
+
         private string ProcessString(string s)
         {
             if (string.IsNullOrEmpty(s))
@@ -679,25 +701,138 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 return false;
         }
 
+        private bool QueryMaxKey(string sql, Dictionary<string, object> parms, out object value)
+        {
+            if (Query(sql, parms, out IDataWrapper data))
+                try
+                {
+                    if (data.Read())
+                    {
+                        value = data.GetValue(0);
+
+                        return true;
+                    }
+                }
+                finally
+                {
+                    data.Close();
+                }
+
+            value = null;
+            return false;
+        }
+
         public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
             out IDataWrapper reader)
         {
+            StringBuilder sb = new StringBuilder();
+            string tableName = ProcessTableName(table.SourceName);
+
             // 语法格式形如：
             // SELECT <fieldsSQL> FROM <tableName> {WHERE <whereSQL>}
             // {ORDER BY <orderSQL>} LIMIT <fromRow - 1>, <toRow - fromRow + 1>
-            StringBuilder sb = new StringBuilder()
-                .Append("SELECT ").Append(ProcessFieldNames(table.SourceFields))
-                .Append(" FROM ").Append(ProcessTableName(table.SourceName));
+            //
+            // 如果存在主键，可以优化为：
+            // SELECT <A.fieldsSQL> FROM <tableName> A JOIN (SELECT <keyFields> FROM <tableName> {WHERE <whereSQL>}
+            // {ORDER BY <orderSQL>} LIMIT <fromRow - 1>, <toRow - fromRow + 1>) B ON <A.keyFields> = <B.keyFields>
+            //
+            // 如果主键字段只有一个，可以进一步优化为：
+            // SELECT <A.fieldsSQL> FROM <tableName> A JOIN (SELECT <keyField> FROM <tableName>
+            // {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}} ORDER BY <keyField> ASC
+            // LIMIT <toRow - fromRow + 1>) B ON A.<keyField> = B.<keyField>
+            // 其中
+            // @LastMaxKey = SELECT MAX(<keyField>) AS '_MaxKey_' FROM (SELECT <keyField> FROM <tableName>
+            // {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}} ORDER BY <keyField> ASC
+            // LIMIT <toRow - fromRow + 1>) A
+            if (table.KeyFields.Length == 1)
+            {
+                string keyField = ProcessFieldName(table.KeyFields[0]);
 
-            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                sb.Append(" WHERE ").Append(table.SourceWhereSQL);
+                // 查询最大键值
+                sb.Append($"SELECT MAX({keyField}) AS '_MaxKey_' FROM (SELECT {keyField} FROM {tableName}");
+                if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
+                {
+                    sb.Append(" WHERE ");
+                    if (parms.ContainsKey("LastMaxKey"))
+                    {
+                        sb.Append($"{keyField} > @LastMaxKey");
+                        if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                            sb.Append(" AND ").Append(table.SourceWhereSQL);
+                    }
+                    else
+                        sb.Append(table.SourceWhereSQL);
+                }
+                if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" ORDER BY {table.OrderSQL}");
+                sb.Append($" LIMIT {toRow - fromRow + 1}) A");
 
-            if (!string.IsNullOrEmpty(table.OrderSQL))
-                sb.Append(" ORDER BY ").Append(table.OrderSQL);
+                if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
 
-            sb.Append(" LIMIT ").Append(fromRow - 1).Append(", ").Append(toRow - fromRow + 1);
+                    sb.Length = 0;
+                    sb.Append($"SELECT {fieldsSQL} FROM {tableName} A JOIN (SELECT {keyField} FROM {tableName}");
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
+                    {
+                        sb.Append(" WHERE ");
+                        if (parms.ContainsKey("LastMaxKey"))
+                        {
+                            sb.Append($"{keyField} > @LastMaxKey");
+                            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                                sb.Append(" AND ").Append(table.SourceWhereSQL);
+                        }
+                        else
+                            sb.Append(table.SourceWhereSQL);
+                    }
+                    if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" ORDER BY {table.OrderSQL}");
+                    sb.Append($" LIMIT {toRow - fromRow + 1}) B ON A.{keyField} = B.{keyField}");
 
-            return Query(sb.ToString(), parms, out reader);
+                    bool rst = Query(sb.ToString(), parms, out reader);
+
+                    parms["LastMaxKey"] = maxValue;
+
+                    return rst;
+                }
+                else
+                {
+                    reader = null;
+
+                    return false;
+                }
+            }
+            else
+            {
+                if (table.KeyFields.Length > 0)
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
+                    string keyField = ProcessFieldName(table.KeyFields[0]);
+                    string keyFields = ProcessFieldNames(table.KeyFields);
+
+                    sb.Append($"SELECT {fieldsSQL} FROM {tableName} A JOIN (SELECT {keyFields} FROM {tableName}");
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append(" WHERE ").Append(table.SourceWhereSQL);
+                    if (!string.IsNullOrEmpty(table.OrderSQL))
+                        sb.Append(" ORDER BY ").Append(table.OrderSQL);
+                    sb.Append($" LIMIT {fromRow - 1}, {toRow - fromRow + 1}) B ON A.{keyField} = B.{keyField}");
+                    for (int i = 1; i < table.KeyFields.Length; i++)
+                    {
+                        keyField = ProcessFieldName(table.KeyFields[i]);
+                        sb.Append($" AND A.{keyField} = B.{keyField}");
+                    }
+                }
+                else
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
+
+                    sb.Append($"SELECT {fieldsSQL} FROM {tableName}");
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                        sb.Append(" WHERE ").Append(table.SourceWhereSQL);
+                    if (!string.IsNullOrEmpty(table.OrderSQL))
+                        sb.Append(" ORDER BY ").Append(table.OrderSQL);
+                    sb.Append($" LIMIT {fromRow - 1}, {toRow - fromRow + 1}");
+                }
+
+                return Query(sb.ToString(), parms, out reader);
+            }
         }
 
         public bool QueryParam(string sql, Dictionary<string, object> parms)

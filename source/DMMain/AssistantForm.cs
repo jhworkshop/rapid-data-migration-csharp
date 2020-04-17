@@ -202,7 +202,7 @@ namespace JHWork.DataMigration
                         DestName = info.Name,
                         Order = info.Order,
                         PageSize = 100,
-                        OrderSQL = string.Join(" ASC, ", info.KeyFields) + " ASC",
+                        OrderSQL = info.KeyFields.Length == 0 ? "" : string.Join(" ASC, ", info.KeyFields) + " ASC",
                         SourceWhereSQL = "",
                         DestWhereSQL = "",
                         WriteMode = WriteModes.Append,
