@@ -775,9 +775,8 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             // {order by <orderSQL>} limit <toRow - fromRow + 1> offset <fromRow - 1>) B on <A.keyFields> = <B.keyFields>
             //
             // 如果主键字段只有一个，可以进一步优化为：
-            // select <A.fieldsSQL> from <tableName> A join (select <keyField> from <tableName>
-            // {where {<keyField> > @LastMaxKey} {and {<whereSQL>}} order by <keyField> asc
-            // limit <toRow - fromRow + 1>) B on A.<keyField> = B.<keyField>
+            // select <fieldsSQL> from <tableName> {where {<keyField> > @LastMaxKey} {and {<whereSQL>}}
+            // order by <keyField> asc limit <toRow - fromRow + 1>
             // 其中
             // @LastMaxKey = select max(<keyField>) as "_MaxKey_" from (select <keyField> from <tableName>
             // {where {<keyField> > @LastMaxKey} {and {<whereSQL>}}} order by <keyField> asc
@@ -800,15 +799,14 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     else
                         sb.Append(table.SourceWhereSQL);
                 }
-                if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" order by {table.OrderSQL}");
-                sb.Append($" limit {toRow - fromRow + 1}) A");
+                sb.Append($" order by {keyField} limit {toRow - fromRow + 1}) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
 
                     sb.Length = 0;
-                    sb.Append($"select {fieldsSQL} from {tableName} A join (select {keyField} from {tableName}");
+                    sb.Append($"select {fieldsSQL} from {tableName}");
                     if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
                     {
                         sb.Append(" where ");
@@ -821,8 +819,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                         else
                             sb.Append(table.SourceWhereSQL);
                     }
-                    if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" order by {table.OrderSQL}");
-                    sb.Append($" limit {toRow - fromRow + 1}) B on A.{keyField} = B.{keyField}");
+                    sb.Append($" order by {keyField} limit {toRow - fromRow + 1}");
 
                     bool rst = Query(sb.ToString(), parms, out reader);
 

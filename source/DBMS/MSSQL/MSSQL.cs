@@ -795,12 +795,95 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 return false;
         }
 
+        private bool QueryMaxKey(string sql, Dictionary<string, object> parms, out object value)
+        {
+            if (Query(sql, parms, out IDataWrapper data))
+                try
+                {
+                    if (data.Read())
+                    {
+                        value = data.GetValue(0);
+
+                        return true;
+                    }
+                }
+                finally
+                {
+                    data.Close();
+                }
+
+            value = null;
+            return false;
+        }
+
         public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
             out IDataWrapper reader)
         {
             StringBuilder sb = new StringBuilder();
 
-            if (Version.Parse(conn.ServerVersion).Major >= 10) // 2008 或更新版本
+            // 如果主键字段只有一个：
+            // SELECT TOP <toRow - fromRow + 1> <fieldsSQL> FROM <tableName>
+            // {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}} ORDER BY <keyField> ASC
+            // 其中
+            // @LastMaxKey = SELECT MAX(<keyField>) AS '_MaxKey_' FROM (
+            // SELECT TOP <toRow - fromRow + 1> <keyField> FROM <tableName>
+            // {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}} ORDER BY <keyField> ASC
+            if (table.KeyFields.Length == 1)
+            {
+                string tableName = ProcessTableName(table.SourceName, with);
+                string keyField = ProcessFieldName(table.KeyFields[0]);
+
+                // 查询最大键值
+                sb.Append($"SELECT MAX({keyField}) AS '_MaxKey_' FROM (")
+                    .Append($"SELECT TOP {toRow - fromRow + 1} {keyField} FROM {tableName}");
+                if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
+                {
+                    sb.Append(" WHERE ");
+                    if (parms.ContainsKey("LastMaxKey"))
+                    {
+                        sb.Append($"{keyField} > @LastMaxKey");
+                        if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                            sb.Append(" AND ").Append(table.SourceWhereSQL);
+                    }
+                    else
+                        sb.Append(table.SourceWhereSQL);
+                }
+                sb.Append($" ORDER BY {keyField} ASC) A");
+
+                if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
+                {
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
+
+                    sb.Length = 0;
+                    sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableName}");
+                    if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
+                    {
+                        sb.Append(" WHERE ");
+                        if (parms.ContainsKey("LastMaxKey"))
+                        {
+                            sb.Append($"{keyField} > @LastMaxKey");
+                            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
+                                sb.Append(" AND ").Append(table.SourceWhereSQL);
+                        }
+                        else
+                            sb.Append(table.SourceWhereSQL);
+                    }
+                    sb.Append($" ORDER BY {keyField} ASC");
+
+                    bool rst = Query(sb.ToString(), parms, out reader);
+
+                    parms["LastMaxKey"] = maxValue;
+
+                    return rst;
+                }
+                else
+                {
+                    reader = null;
+
+                    return false;
+                }
+            }
+            else if (Version.Parse(conn.ServerVersion).Major >= 10) // 2008 或更新版本
             {
                 // 语法格式形如：
                 // SELECT <fieldsSQL> FROM (SELECT ROW_NUMBER() OVER (ORDER BY <orderSQL>)
@@ -816,35 +899,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // {WHERE <whereSQL>}
                 // ) A WHERE [_RowNum_] BETWEEN <fromRow> AND <toRow>) A ON <B.keyFields> = <A.keyFields>
                 //
-                // 如果主键字段只有一个，可以进一步优化为：
-                // SELECT <B.fieldsSQL> FROM <tableName> B JOIN (SELECT MIN(<keyFields>) AS '_MinKey_',
-                // MAX(<keyFields>) AS '_MaxKey' FROM (SELECT <keyFields>, ROW_NUMBER OVER
-                // (ORDER BY <orderSQL>) AS '_RowNum_' FROM <tableName>
-                // {WHERE <whereSQL>})
-                // A WHERE A.[_RowNum_] BETWEEN <fromRow> AND <toRow>) A
-                // ON <B.keyFields> BETWEEN A.[_MinKey_] AND A.[_MaxKey]
-                // {WHERE <whereSQL>})
-                if (table.KeyFields.Length == 1)
-                {
-                    string tableNameWith = ProcessTableName(table.SourceName, with);
-                    string tableNameWithB = ProcessTableName(table.SourceName, with, "B");
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
-                    string keyField = ProcessFieldName(table.KeyFields[0]);
-
-                    sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT MIN({keyField}) AS '_MinKey_',")
-                        .Append($" MAX({keyField}) AS '_MaxKey' FROM (SELECT {keyField}, ROW_NUMBER() OVER")
-                        .Append($" (ORDER BY {table.OrderSQL}) AS '_RowNum_' FROM {tableNameWith}");
-
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                        sb.Append($" WHERE {table.SourceWhereSQL}");
-
-                    sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}) A")
-                        .Append($" ON B.{keyField} BETWEEN A.[_MinKey_] AND A.[_MaxKey]");
-
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                        sb.Append($" WHERE {table.SourceWhereSQL}");
-                }
-                else if (table.KeyFields.Length > 1)
+                if (table.KeyFields.Length > 1)
                 {
                     string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
                     string tableName = ProcessTableName(table.SourceName, with);

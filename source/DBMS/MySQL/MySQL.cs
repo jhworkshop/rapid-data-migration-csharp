@@ -737,9 +737,8 @@ namespace JHWork.DataMigration.DBMS.MySQL
             // {ORDER BY <orderSQL>} LIMIT <fromRow - 1>, <toRow - fromRow + 1>) B ON <A.keyFields> = <B.keyFields>
             //
             // 如果主键字段只有一个，可以进一步优化为：
-            // SELECT <A.fieldsSQL> FROM <tableName> A JOIN (SELECT <keyField> FROM <tableName>
-            // {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}} ORDER BY <keyField> ASC
-            // LIMIT <toRow - fromRow + 1>) B ON A.<keyField> = B.<keyField>
+            // SELECT <fieldsSQL> FROM <tableName> {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}}
+            // ORDER BY <keyField> ASC LIMIT <toRow - fromRow + 1>
             // 其中
             // @LastMaxKey = SELECT MAX(<keyField>) AS '_MaxKey_' FROM (SELECT <keyField> FROM <tableName>
             // {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}} ORDER BY <keyField> ASC
@@ -762,15 +761,14 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     else
                         sb.Append(table.SourceWhereSQL);
                 }
-                if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" ORDER BY {table.OrderSQL}");
-                sb.Append($" LIMIT {toRow - fromRow + 1}) A");
+                sb.Append($" ORDER BY {keyField} LIMIT {toRow - fromRow + 1}) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
 
                     sb.Length = 0;
-                    sb.Append($"SELECT {fieldsSQL} FROM {tableName} A JOIN (SELECT {keyField} FROM {tableName}");
+                    sb.Append($"SELECT {fieldsSQL} FROM {tableName}");
                     if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
                     {
                         sb.Append(" WHERE ");
@@ -783,8 +781,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                         else
                             sb.Append(table.SourceWhereSQL);
                     }
-                    if (!string.IsNullOrEmpty(table.OrderSQL)) sb.Append($" ORDER BY {table.OrderSQL}");
-                    sb.Append($" LIMIT {toRow - fromRow + 1}) B ON A.{keyField} = B.{keyField}");
+                    sb.Append($" ORDER BY {keyField} LIMIT {toRow - fromRow + 1}");
 
                     bool rst = Query(sb.ToString(), parms, out reader);
 
