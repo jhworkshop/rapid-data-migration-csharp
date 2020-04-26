@@ -182,6 +182,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 fc.Close();
             }
 
+            for (int i = 0; i < fields.Length; i++)
+                fields[i] = ProcessFieldName(fields[i]);
+
             script = new CSVScript() { CSVFile = file, Fields = fields };
         }
 
