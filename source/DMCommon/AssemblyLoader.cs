@@ -62,7 +62,7 @@ namespace JHWork.DataMigration.Common
                     }
                     catch (Exception ex)
                     {
-                        Logger.WriteLogExcept("AssemblyLoader()", ex);
+                        Logger.WriteLogExcept($"AssemblyLoader({file})", ex);
                     }
             }
         }
