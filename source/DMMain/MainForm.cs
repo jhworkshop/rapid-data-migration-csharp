@@ -28,6 +28,117 @@ namespace JHWork.DataMigration
             InitializeComponent();
         }
 
+        private void AfterAction()
+        {
+            Invoke(new Action(() =>
+            {
+                ResetProgress();
+                Lock(LockTypes.Ready);
+            }));
+        }
+
+        private void ButtonExit_Click(object sender, EventArgs e)
+        {
+            Close();
+        }
+
+        private void ButtonLoad_Click(object sender, EventArgs e)
+        {
+            if (openDialog.ShowDialog() == DialogResult.OK)
+            {
+                Lock(LockTypes.Loading);
+                ClearView();
+
+                try
+                {
+                    profile.Load(openDialog.FileName);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"配置文件有误！{ex.Message}", "加载配置", MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                    Lock(LockTypes.Ready);
+
+                    return;
+                }
+
+                CreateView();
+                executor.Test(profile);
+            }
+        }
+
+        private void ButtonProfile_Click(object sender, EventArgs e)
+        {
+            new AssistantForm().ShowDialog();
+        }
+
+        private void ButtonRun_Click(object sender, EventArgs e)
+        {
+            Lock(LockTypes.Running);
+            executor.Run(profile);
+        }
+
+        private void ButtonStop_Click(object sender, EventArgs e)
+        {
+            executor.Stop();
+        }
+
+        private void ClearView()
+        {
+            listView.Items.Clear();
+            listView.Groups.Clear();
+        }
+
+        private void CreateView()
+        {
+            for (int i = 0; i < profile.Instances.Length; i++)
+            {
+                ListViewGroup group = new ListViewGroup();
+
+                listView.Groups.Add(group);
+                group.Header = profile.Instances[i].Name;
+
+                for (int j = 0; j < profile.Instances[i].Tasks.Length; j++)
+                {
+                    Task task = profile.Instances[i].Tasks[j];
+                    ListViewItem item = group.Items.Add(task.Name, 1);
+
+                    item.Tag = task;
+                    item.StateImageIndex = DetermineImageIndex(DataStates.Idle);
+                    item.SubItems.Add("");
+                    item.SubItems.Add("");
+                    item.SubItems.Add("");
+                    item.SubItems.Add("");
+
+                    listView.Items.Add(item);
+                }
+            }
+
+            statusBarLabel1.Text = $"{profile.Instances.Length} 个实例合共 {listView.Items.Count} 个任务";
+            ResetProgress();
+        }
+
+        private int DetermineImageIndex(DataStates state)
+        {
+            switch (state)
+            {
+                case DataStates.Done:
+                    return 1;
+
+                case DataStates.Error:
+                    return 2;
+
+                case DataStates.Running:
+                    return 0;
+
+                case DataStates.RunningError:
+                    return 2;
+
+                default:
+                    return -1;
+            }
+        }
+
         private void Lock(LockTypes type)
         {
             switch (type)
@@ -62,14 +173,33 @@ namespace JHWork.DataMigration
             }
         }
 
-        private void ButtonExit_Click(object sender, EventArgs e)
+        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            Close();
+            if (executor.State != ExecutorState.Idle)
+            {
+                e.Cancel = MessageBox.Show("确定要退出吗？", "确认", MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question) != DialogResult.Yes;
+
+                if (!e.Cancel)
+                {
+                    executor.Stop();
+                    while (executor.State != ExecutorState.Idle)
+                    {
+                        Thread.Sleep(1);
+                        Application.DoEvents();
+                    }
+                    Thread.Sleep(1);
+                }
+            }
         }
 
-        private void ButtonProfile_Click(object sender, EventArgs e)
+        private void MainForm_Load(object sender, EventArgs e)
         {
-            new AssistantForm().ShowDialog();
+            Text += $" {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
+            statusBarLabel1.Text = "未加载配置";
+            profile.Callback = AfterAction;
+            Lock(LockTypes.Ready);
+            ResetProgress();
         }
 
         private void ResetProgress()
@@ -91,11 +221,11 @@ namespace JHWork.DataMigration
                         item.SubItems[3].Text = $"{task.Progress * 100.0 / task.Total:0.0}%";
                     if (task.StartTick == 0)
                         item.SubItems[4].Text = "0.0";
-                    else if (task.Status == DataState.Running)
+                    else if (task.Status == DataStates.Running || task.Status == DataStates.RunningError)
                         item.SubItems[4].Text = ((WinAPI.GetTickCount() - task.StartTick) / 1000.0).ToString("#,##0.0");
                     else
                         item.SubItems[4].Text = (task.StartTick / 1000.0).ToString("#,##0.0");
-                    item.StateImageIndex = (int)task.Status;
+                    item.StateImageIndex = DetermineImageIndex(task.Status);
                 }
 
             if (executor.State == ExecutorState.Planning)
@@ -121,117 +251,8 @@ namespace JHWork.DataMigration
             }
         }
 
-        private void ClearView()
-        {
-            listView.Items.Clear();
-            listView.Groups.Clear();
-        }
-
-        private void CreateView()
-        {
-            for (int i = 0; i < profile.Instances.Length; i++)
-            {
-                ListViewGroup group = new ListViewGroup();
-
-                listView.Groups.Add(group);
-                group.Header = profile.Instances[i].Name;
-
-                for (int j = 0; j < profile.Instances[i].Tasks.Length; j++)
-                {
-                    Task task = profile.Instances[i].Tasks[j];
-                    ListViewItem item = group.Items.Add(task.Name, 1);
-
-                    item.Tag = task;
-                    item.StateImageIndex = (int)DataState.Normal;
-                    item.SubItems.Add("");
-                    item.SubItems.Add("");
-                    item.SubItems.Add("");
-                    item.SubItems.Add("");
-
-                    listView.Items.Add(item);
-                }
-            }
-
-            statusBarLabel1.Text = $"{profile.Instances.Length} 个实例合共 {listView.Items.Count} 个任务";
-            ResetProgress();
-        }
-
-        private void AfterAction()
-        {
-            Invoke(new Action(() =>
-            {
-                ResetProgress();
-                Lock(LockTypes.Ready);
-            }));
-        }
-
-        private void ButtonLoad_Click(object sender, EventArgs e)
-        {
-            if (openDialog.ShowDialog() == DialogResult.OK)
-            {
-                Lock(LockTypes.Loading);
-                ClearView();
-
-                try
-                {
-                    profile.Load(openDialog.FileName);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show($"配置文件有误！{ex.Message}", "加载配置", MessageBoxButtons.OK,
-                        MessageBoxIcon.Error);
-                    Lock(LockTypes.Ready);
-
-                    return;
-                }
-
-                CreateView();
-                executor.Test(profile);
-            }
-        }
-
-        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
-        {
-            if (executor.State != ExecutorState.Idle)
-            {
-                e.Cancel = MessageBox.Show("确定要退出吗？", "确认", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question) != DialogResult.Yes;
-
-                if (!e.Cancel)
-                {
-                    executor.Stop();
-                    while (executor.State != ExecutorState.Idle)
-                    {
-                        Thread.Sleep(1);
-                        Application.DoEvents();
-                    }
-                    Thread.Sleep(1);
-                }
-            }
-        }
-
         private void Timer_Tick(object sender, EventArgs e)
         {
-            ResetProgress();
-        }
-
-        private void ButtonStop_Click(object sender, EventArgs e)
-        {
-            executor.Stop();
-        }
-
-        private void ButtonRun_Click(object sender, EventArgs e)
-        {
-            Lock(LockTypes.Running);
-            executor.Run(profile);
-        }
-
-        private void MainForm_Load(object sender, EventArgs e)
-        {
-            Text += $" {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}";
-            statusBarLabel1.Text = "未加载配置";
-            profile.Callback = AfterAction;
-            Lock(LockTypes.Ready);
             ResetProgress();
         }
     }

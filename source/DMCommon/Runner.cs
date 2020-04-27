@@ -7,12 +7,13 @@ namespace JHWork.DataMigration.Common
     /// <summary>
     /// 数据状态，用于标记执行的状态。
     /// </summary>
-    public enum DataState
+    public enum DataStates
     {
-        Normal = -1, // 正常
-        Running = 0, // 正在执行
-        Done = 1,    // 完成
-        Error = 2    // 错误
+        Idle = 0,           // 空闲
+        Running = 1,        // 执行中
+        Done = 0x10,        // 完成
+        Error = 0x20,       // 错误
+        RunningError = 0x21 // 执行中有错误
     }
 
     /// <summary>
@@ -81,11 +82,11 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public class Task
     {
-        public string Name { get; set; }      // 名称  
-        public ulong Progress { get; set; }   // 记录数
-        public ulong Total { get; set; }      // 总记录数
-        public DataState Status { get; set; } // 状态
-        public ulong StartTick { get; set; }  // 开始时间
+        public string Name { get; set; }       // 名称  
+        public ulong Progress { get; set; }    // 记录数
+        public ulong Total { get; set; }       // 总记录数
+        public DataStates Status { get; set; } // 状态
+        public ulong StartTick { get; set; }   // 开始时间
     }
 
     /// <summary>
@@ -110,8 +111,7 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public class IntegrationTable : Table
     {
-        public ulong Progress { get; set; }   // 汇集记录数
-        public DataState Status { get; set; } // 状态
+        public ulong Progress { get; set; } // 汇集记录数
     }
 
     /// <summary>
@@ -144,8 +144,8 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public class MigrationTable : Table
     {
-        public ulong Progress { get; set; }   // 迁移记录数
-        public DataState Status { get; set; } // 状态
+        public ulong Progress { get; set; }    // 迁移记录数
+        public DataStates Status { get; set; } // 状态
     }
 
     /// <summary>
