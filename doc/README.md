@@ -136,7 +136,8 @@
             "keyFields": "FolioID",                                       # 关键字段，多个字段之间用逗号分隔
             "skipFields": "",                                             # 忽略字段，多个字段之间用逗号分隔
             "filter": "",                                                 # 数据过滤器名称
-            "dest.mssql.keepIdentity": 1                                  # 保留自增字段值，MSSQL 批量复制专用
+            "dest.mssql.keepIdentity": 1,                                 # 保留自增字段值，MSSQL 批量复制专用
+            "references": ""                                              # 外键引用表，多个表名之间用逗号分隔
         }
     ]
 }

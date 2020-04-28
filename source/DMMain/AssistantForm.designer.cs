@@ -80,6 +80,10 @@
             this.saveDialog = new System.Windows.Forms.SaveFileDialog();
             this.progressLabel = new System.Windows.Forms.Label();
             this.progressBar = new System.Windows.Forms.ProgressBar();
+            this.sourceCompress = new System.Windows.Forms.CheckBox();
+            this.sourceEncrypt = new System.Windows.Forms.CheckBox();
+            this.destEncrypt = new System.Windows.Forms.CheckBox();
+            this.destCompress = new System.Windows.Forms.CheckBox();
             this.tabControl1.SuspendLayout();
             this.tabPage3.SuspendLayout();
             this.tabPage1.SuspendLayout();
@@ -97,7 +101,7 @@
             this.tabControl1.Location = new System.Drawing.Point(8, 8);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(661, 332);
+            this.tabControl1.Size = new System.Drawing.Size(661, 361);
             this.tabControl1.TabIndex = 0;
             // 
             // tabPage3
@@ -107,7 +111,7 @@
             this.tabPage3.ImageIndex = 2;
             this.tabPage3.Location = new System.Drawing.Point(4, 31);
             this.tabPage3.Name = "tabPage3";
-            this.tabPage3.Size = new System.Drawing.Size(653, 297);
+            this.tabPage3.Size = new System.Drawing.Size(653, 326);
             this.tabPage3.TabIndex = 2;
             this.tabPage3.Text = "执行器";
             this.tabPage3.UseVisualStyleBackColor = true;
@@ -116,7 +120,7 @@
             // 
             this.runner.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.runner.FormattingEnabled = true;
-            this.runner.Location = new System.Drawing.Point(259, 136);
+            this.runner.Location = new System.Drawing.Point(238, 134);
             this.runner.Name = "runner";
             this.runner.Size = new System.Drawing.Size(200, 25);
             this.runner.TabIndex = 9;
@@ -124,7 +128,7 @@
             // label15
             // 
             this.label15.AutoSize = true;
-            this.label15.Location = new System.Drawing.Point(194, 139);
+            this.label15.Location = new System.Drawing.Point(173, 137);
             this.label15.Name = "label15";
             this.label15.Size = new System.Drawing.Size(44, 17);
             this.label15.TabIndex = 8;
@@ -138,13 +142,15 @@
             this.tabPage1.Location = new System.Drawing.Point(4, 31);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(653, 297);
+            this.tabPage1.Size = new System.Drawing.Size(653, 326);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "数据源";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.destEncrypt);
+            this.groupBox2.Controls.Add(this.destCompress);
             this.groupBox2.Controls.Add(this.destCharSet);
             this.groupBox2.Controls.Add(this.destPwd);
             this.groupBox2.Controls.Add(this.destUser);
@@ -161,7 +167,7 @@
             this.groupBox2.Controls.Add(this.label14);
             this.groupBox2.Location = new System.Drawing.Point(332, 16);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(300, 263);
+            this.groupBox2.Size = new System.Drawing.Size(300, 288);
             this.groupBox2.TabIndex = 1;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = " 目标 ";
@@ -283,6 +289,8 @@
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.sourceEncrypt);
+            this.groupBox1.Controls.Add(this.sourceCompress);
             this.groupBox1.Controls.Add(this.sourceCharSet);
             this.groupBox1.Controls.Add(this.sourcePwd);
             this.groupBox1.Controls.Add(this.sourceUser);
@@ -299,7 +307,7 @@
             this.groupBox1.Controls.Add(this.label1);
             this.groupBox1.Location = new System.Drawing.Point(16, 16);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(300, 263);
+            this.groupBox1.Size = new System.Drawing.Size(300, 289);
             this.groupBox1.TabIndex = 0;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = " 源 ";
@@ -429,7 +437,7 @@
             this.tabPage2.Location = new System.Drawing.Point(4, 31);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(653, 297);
+            this.tabPage2.Size = new System.Drawing.Size(653, 326);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "数据表";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -477,7 +485,7 @@
             this.listView.Location = new System.Drawing.Point(16, 16);
             this.listView.MultiSelect = false;
             this.listView.Name = "listView";
-            this.listView.Size = new System.Drawing.Size(530, 264);
+            this.listView.Size = new System.Drawing.Size(530, 293);
             this.listView.SmallImageList = this.imageList;
             this.listView.TabIndex = 0;
             this.listView.UseCompatibleStateImageBehavior = false;
@@ -509,7 +517,7 @@
             // 
             // btnImport
             // 
-            this.btnImport.Location = new System.Drawing.Point(499, 347);
+            this.btnImport.Location = new System.Drawing.Point(499, 380);
             this.btnImport.Name = "btnImport";
             this.btnImport.Size = new System.Drawing.Size(75, 25);
             this.btnImport.TabIndex = 1;
@@ -519,7 +527,7 @@
             // 
             // btnSave
             // 
-            this.btnSave.Location = new System.Drawing.Point(590, 347);
+            this.btnSave.Location = new System.Drawing.Point(590, 380);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(75, 25);
             this.btnSave.TabIndex = 2;
@@ -541,7 +549,7 @@
             // progressLabel
             // 
             this.progressLabel.AutoSize = true;
-            this.progressLabel.Location = new System.Drawing.Point(25, 351);
+            this.progressLabel.Location = new System.Drawing.Point(25, 384);
             this.progressLabel.Name = "progressLabel";
             this.progressLabel.Size = new System.Drawing.Size(125, 17);
             this.progressLabel.TabIndex = 3;
@@ -557,11 +565,51 @@
             this.progressBar.TabIndex = 4;
             this.progressBar.Visible = false;
             // 
+            // sourceCompress
+            // 
+            this.sourceCompress.AutoSize = true;
+            this.sourceCompress.Location = new System.Drawing.Point(19, 256);
+            this.sourceCompress.Name = "sourceCompress";
+            this.sourceCompress.Size = new System.Drawing.Size(75, 21);
+            this.sourceCompress.TabIndex = 14;
+            this.sourceCompress.Text = "压缩传输";
+            this.sourceCompress.UseVisualStyleBackColor = true;
+            // 
+            // sourceEncrypt
+            // 
+            this.sourceEncrypt.AutoSize = true;
+            this.sourceEncrypt.Location = new System.Drawing.Point(149, 256);
+            this.sourceEncrypt.Name = "sourceEncrypt";
+            this.sourceEncrypt.Size = new System.Drawing.Size(75, 21);
+            this.sourceEncrypt.TabIndex = 15;
+            this.sourceEncrypt.Text = "加密传输";
+            this.sourceEncrypt.UseVisualStyleBackColor = true;
+            // 
+            // destEncrypt
+            // 
+            this.destEncrypt.AutoSize = true;
+            this.destEncrypt.Location = new System.Drawing.Point(149, 256);
+            this.destEncrypt.Name = "destEncrypt";
+            this.destEncrypt.Size = new System.Drawing.Size(75, 21);
+            this.destEncrypt.TabIndex = 17;
+            this.destEncrypt.Text = "加密传输";
+            this.destEncrypt.UseVisualStyleBackColor = true;
+            // 
+            // destCompress
+            // 
+            this.destCompress.AutoSize = true;
+            this.destCompress.Location = new System.Drawing.Point(19, 256);
+            this.destCompress.Name = "destCompress";
+            this.destCompress.Size = new System.Drawing.Size(75, 21);
+            this.destCompress.TabIndex = 16;
+            this.destCompress.Text = "压缩传输";
+            this.destCompress.UseVisualStyleBackColor = true;
+            // 
             // AssistantForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(676, 381);
+            this.ClientSize = new System.Drawing.Size(676, 415);
             this.Controls.Add(this.progressBar);
             this.Controls.Add(this.progressLabel);
             this.Controls.Add(this.btnSave);
@@ -644,5 +692,9 @@
         private System.Windows.Forms.TabPage tabPage3;
         private System.Windows.Forms.ComboBox runner;
         private System.Windows.Forms.Label label15;
+        private System.Windows.Forms.CheckBox destEncrypt;
+        private System.Windows.Forms.CheckBox destCompress;
+        private System.Windows.Forms.CheckBox sourceEncrypt;
+        private System.Windows.Forms.CheckBox sourceCompress;
     }
 }

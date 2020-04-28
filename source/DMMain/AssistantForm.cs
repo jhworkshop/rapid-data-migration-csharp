@@ -12,7 +12,7 @@ namespace JHWork.DataMigration
     public partial class AssistantForm : Form, IProgress
     {
         private string importedParam = "";
-        private List<Table> importedTables = new List<Table>();
+        private readonly List<Table> importedTables = new List<Table>();
 
         public AssistantForm()
         {
@@ -48,6 +48,8 @@ namespace JHWork.DataMigration
                     sourceUser.Text = source.User;
                     sourcePwd.Text = source.Pwd;
                     sourceCharSet.Text = source.CharSet;
+                    sourceCompress.Checked = source.Compress;
+                    sourceEncrypt.Checked = source.Encrypt;
 
                     destDBMS.Text = dest.DBMS;
                     destServer.Text = dest.Server;
@@ -56,6 +58,8 @@ namespace JHWork.DataMigration
                     destUser.Text = dest.User;
                     destPwd.Text = dest.Pwd;
                     destCharSet.Text = dest.CharSet;
+                    destCompress.Checked = dest.Compress;
+                    destEncrypt.Checked = dest.Encrypt;
 
                     RetrieveTables();
                 }
@@ -66,15 +70,15 @@ namespace JHWork.DataMigration
             }
         }
 
-        private void ButtonRetrieve_Click(object sender, EventArgs e)
-        {
-            RetrieveTables();
-        }
-
         private void ButtonReverse_Click(object sener, EventArgs e)
         {
             foreach (ListViewItem item in listView.Items)
                 item.Checked = !item.Checked;
+        }
+
+        private void ButtonRetrieve_Click(object sender, EventArgs e)
+        {
+            RetrieveTables();
         }
 
         private void ButtonSave_Click(object sender, EventArgs e)
@@ -92,7 +96,9 @@ namespace JHWork.DataMigration
                     DB = sourceDB.Text,
                     User = sourceUser.Text,
                     Pwd = sourcePwd.Text,
-                    CharSet = sourceCharSet.Text
+                    CharSet = sourceCharSet.Text,
+                    Compress = sourceCompress.Checked,
+                    Encrypt = sourceEncrypt.Checked
                 };
                 Database dest = new Database()
                 {
@@ -102,7 +108,9 @@ namespace JHWork.DataMigration
                     DB = destDB.Text,
                     User = destUser.Text,
                     Pwd = destPwd.Text,
-                    CharSet = destCharSet.Text
+                    CharSet = destCharSet.Text,
+                    Compress = destCompress.Checked,
+                    Encrypt = destEncrypt.Checked
                 };
                 List<Table> tables = new List<Table>();
 
@@ -124,18 +132,6 @@ namespace JHWork.DataMigration
                 item.Checked = true;
         }
 
-        private void ProfileForm_Load(object sender, EventArgs e)
-        {
-            sourceDBMS.Items.AddRange(DBMSFactory.GetDBMSReaderNames());
-            destDBMS.Items.AddRange(DBMSFactory.GetDBMSWriterNames());
-            runner.Items.AddRange(RunnerFactory.GetRunnerAssistantNames());
-
-            string[] charsets = new string[] { "gbk", "utf8" };
-
-            sourceCharSet.Items.AddRange(charsets);
-            destCharSet.Items.AddRange(charsets);
-        }
-
         private bool InitDataSource(ref IDBMSAssistant source, ref IDBMSAssistant dest)
         {
             source = DBMSFactory.GetDBMSAssistantByName(sourceDBMS.Text);
@@ -150,7 +146,9 @@ namespace JHWork.DataMigration
                     DB = sourceDB.Text,
                     User = sourceUser.Text,
                     Pwd = sourcePwd.Text,
-                    CharSet = sourceCharSet.Text
+                    CharSet = sourceCharSet.Text,
+                    Compress = sourceCompress.Checked,
+                    Encrypt = sourceEncrypt.Checked
                 };
                 Database dstDB = new Database()
                 {
@@ -160,13 +158,34 @@ namespace JHWork.DataMigration
                     DB = destDB.Text,
                     User = destUser.Text,
                     Pwd = destPwd.Text,
-                    CharSet = destCharSet.Text
+                    CharSet = destCharSet.Text,
+                    Compress = destCompress.Checked,
+                    Encrypt = destEncrypt.Checked
                 };
 
                 return source.Connect(srcDB) && dest.Connect(dstDB);
             }
 
             return false;
+        }
+
+        public void OnProgress(int total, int progress)
+        {
+            progressBar.Maximum = total;
+            progressBar.Value = progress;
+            Application.DoEvents();
+        }
+
+        private void ProfileForm_Load(object sender, EventArgs e)
+        {
+            sourceDBMS.Items.AddRange(DBMSFactory.GetDBMSReaderNames());
+            destDBMS.Items.AddRange(DBMSFactory.GetDBMSWriterNames());
+            runner.Items.AddRange(RunnerFactory.GetRunnerAssistantNames());
+
+            string[] charsets = new string[] { "gbk", "utf8" };
+
+            sourceCharSet.Items.AddRange(charsets);
+            destCharSet.Items.AddRange(charsets);
         }
 
         private void RetrieveTables()
@@ -208,7 +227,8 @@ namespace JHWork.DataMigration
                         WriteMode = WriteModes.Append,
                         KeyFields = info.KeyFields,
                         SkipFields = { },
-                        Filter = ""
+                        Filter = "",
+                        References = info.References
                     };
                     string sourceName = "";
                     bool found = false;
@@ -254,13 +274,6 @@ namespace JHWork.DataMigration
             }
             progressLabel.Visible = false;
             progressBar.Visible = false;
-        }
-
-        public void OnProgress(int total, int progress)
-        {
-            progressBar.Maximum = total;
-            progressBar.Value = progress;
-            Application.DoEvents();
         }
     }
 }

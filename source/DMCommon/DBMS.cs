@@ -33,9 +33,10 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public class TableInfo
     {
-        public string Name { get; set; }        // 表名
-        public string[] KeyFields { get; set; } // 主键字段
-        public int Order { get; set; }          // 排序，从小到大
+        public string Name { get; set; }         // 表名
+        public string[] KeyFields { get; set; }  // 主键字段
+        public int Order { get; set; }           // 排序，从小到大
+        public string[] References { get; set; } // 外键引用表
     }
 
     /// <summary>

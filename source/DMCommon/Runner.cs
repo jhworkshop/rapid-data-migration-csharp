@@ -53,6 +53,8 @@ namespace JHWork.DataMigration.Common
         public bool KeepIdentity { get; set; }      // 保留自增值
         public string[] SourceFields { get; set; }  // 源字段
         public string[] DestFields { get; set; }    // 目标字段
+        public string[] References { get; set; }    // 外键表
+        public ulong Total { get; set; }            // 任务记录数
     }
 
     /// <summary>
@@ -71,7 +73,16 @@ namespace JHWork.DataMigration.Common
             int rst = x.Order - y.Order;
 
             if (rst == 0)
-                return string.Compare(x.DestName, y.DestName);
+            {
+                ulong weightX = x.Total * (uint)x.DestFields.Length, weightY = y.Total * (uint)y.DestFields.Length;
+
+                if (weightX > weightY)
+                    return -1;
+                else if (weightX < weightY)
+                    return 1;
+                else
+                    return string.Compare(x.DestName, y.DestName);
+            }
             else
                 return rst;
         }

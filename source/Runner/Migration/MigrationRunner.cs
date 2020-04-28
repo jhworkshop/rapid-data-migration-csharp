@@ -107,6 +107,9 @@ namespace JHWork.DataMigration.Runner.Migration
                     Filter = o["filter"].ToString(),
                     KeepIdentity = o.ContainsKey("dest.mssql.keepIdentity") ?
                         int.Parse(o["dest.mssql.keepIdentity"].ToString()) != 0 : true,
+                    DestFields = new string[] { },
+                    References = o.ContainsKey("references") ? o["references"].ToString().Split(',') : new string[] { },
+                    Total = 0,
                     Progress = 0,
                     Status = DataStates.Idle
                 };
@@ -196,9 +199,19 @@ namespace JHWork.DataMigration.Runner.Migration
                 return writer.Connect(db);
         }
 
-        private static string[] CreateThreadAction()
+        private string[] CreateThreadAction()
         {
             return new string[] { "read", "write" };
+        }
+
+        private int[] CreateThreadAction(int count)
+        {
+            int[] rst = new int[count];
+
+            for (int i = 0; i < count; i++)
+                rst[i] = i + 1;
+
+            return rst;
         }
 
         private void DuplicateDatabase(Database source, Database dest)
@@ -222,21 +235,56 @@ namespace JHWork.DataMigration.Runner.Migration
             {
                 if (status.IsStopped()) break;
 
-                if (t is MigrationTask task)
+                if (t is MigrationTask task && task.Tables.Length > 0)
                 {
                     task.StartTick = WinAPI.GetTickCount();
                     task.Status = DataStates.Running;
+
+                    // 构建待迁移表清单：lst[0] = 独立表，lst[1+] = 依赖树
+                    List<List<MigrationTable>> lst = new List<List<MigrationTable>>
+                    {
+                        new List<MigrationTable>(task.Tables[0]),
+                        new List<MigrationTable>()
+                    };
+
+                    for (int i = 1; i < task.Tables.Length; i++)
+                    {
+                        for (int j = 0; j < task.Tables[i].Length; j++)
+                        {
+                            MigrationTable ta = task.Tables[i][j];
+
+                            for (int k = 0; k < ta.References.Length; k++)
+                                for (int l = 0; l < lst[0].Count; l++)
+                                    if (ta.References[k].Equals(lst[0][l].DestName))
+                                    {
+                                        lst[1].Add(lst[0][l]);
+                                        lst[0].RemoveAt(l);
+                                        break;
+                                    }
+                        }
+                        lst.Add(new List<MigrationTable>(task.Tables[i]));
+                    }
+
+                    TableComparer comparer = new TableComparer();
+
+                    foreach (List<MigrationTable> tables in lst)
+                        tables.Sort(comparer);
+
+                    List<MigrationTable> runList = new List<MigrationTable>();
+
+                    // 开始迁移
                     try
                     {
-                        for (int i = 0; i < task.Tables.Length; i++)
+                        Parallel.ForEach(CreateThreadAction((int)task.Threads), i =>
                         {
-                            if (status.IsStopped()) break;
+                            MigrationTable table = GetTable(lst, runList);
 
-                            Parallel.ForEach(task.Tables[i],
-                                new ParallelOptions() { MaxDegreeOfParallelism = (int)task.Threads }, table =>
+                            while (table != null)
                             {
-                                MigrateTable(task, table, out string reason);
+                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移开始...");
 
+                                lock (runList) { runList.Add(table); }
+                                MigrateTable(task, table, out string reason);
                                 if (table.Status == DataStates.Done)
                                 {
                                     Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移成功。");
@@ -250,10 +298,13 @@ namespace JHWork.DataMigration.Runner.Migration
                                         $"迁移失败！{reason}");
                                     Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "失败", reason);
                                 }
-                            });
-                        }
+                                lock (runList) { runList.Remove(table); }
 
-                        if (status.IsStopped() || task.Status == DataStates.RunningError)
+                                table = GetTable(lst, runList);
+                            }
+                        });
+
+                        if (status.IsStopped() || task.Status == DataStates.RunningError || task.Status == DataStates.Error)
                         {
                             task.Status = DataStates.Error;
                             Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", "迁移失败！");
@@ -277,6 +328,86 @@ namespace JHWork.DataMigration.Runner.Migration
         public string GetName()
         {
             return "Migration";
+        }
+
+        private MigrationTable GetTable(List<List<MigrationTable>> lst, List<MigrationTable> runList)
+        {
+            while (true)
+            {
+                lock (lst)
+                {
+                    int dependCount = 0;
+                    // 先从依赖树取
+                    for (int i = 1; i < lst.Count; i++)
+                    {
+                        dependCount += lst[i].Count;
+                        for (int j = 0; j < lst[i].Count; j++)
+                        {
+                            // 无外键依赖
+                            if (lst[i][j].References.Length == 0)
+                            {
+                                MigrationTable rst = lst[i][j];
+
+                                lst[i].RemoveAt(j);
+
+                                return rst;
+                            }
+                            else
+                            {
+                                bool inTree = false;
+
+                                foreach (string s in lst[i][j].References)
+                                {
+                                    for (int k = 1; k < i; k++)
+                                    {
+                                        for (int l = 0; l < lst[k].Count; l++)
+                                            if (s.Equals(lst[k][l].DestName))
+                                            {
+                                                inTree = true;
+                                                break;
+                                            }
+                                        if (inTree) break;
+                                    }
+                                    if (inTree) break;
+
+                                    lock (runList)
+                                    {
+                                        for (int k = 0; k < runList.Count; k++)
+                                            if (s.Equals(runList[k].DestName))
+                                            {
+                                                inTree = true;
+                                                break;
+                                            }
+                                    }
+                                }
+
+                                if (!inTree)
+                                {
+                                    MigrationTable rst = lst[i][j];
+
+                                    lst[i].RemoveAt(j);
+
+                                    return rst;
+                                }
+                            }
+                        }
+                    }
+
+                    // 再从独立表取
+                    if (lst[0].Count > 0)
+                    {
+                        MigrationTable rst = lst[0][0];
+
+                        lst[0].RemoveAt(0);
+
+                        return rst;
+                    }
+                    else if (dependCount == 0)
+                        return null;
+
+                    Thread.Sleep(50);
+                }
+            }
         }
 
         private JObject LoadAndDeserialize(string file)
@@ -480,7 +611,7 @@ namespace JHWork.DataMigration.Runner.Migration
             }
         }
 
-        private static void PrefetchTable(MigrationTask task, MigrationTable table, Dictionary<string, object> parms,
+        private void PrefetchTable(MigrationTask task, MigrationTable table, Dictionary<string, object> parms,
             IDBMSReader source, IDBMSWriter dest)
         {
             Parallel.ForEach(CreateThreadAction(), act =>
@@ -500,6 +631,7 @@ namespace JHWork.DataMigration.Runner.Migration
                         {
                             table.Progress = 0;
                             task.Total += count;
+                            table.Total = count;
                             isError = false;
                         }
                     }
@@ -529,6 +661,7 @@ namespace JHWork.DataMigration.Runner.Migration
                     for (int i = 0; i < task.Tables.Length; i++)
                         foreach (MigrationTable table in task.Tables[i])
                         {
+                            table.Total = 0;
                             table.Progress = 0;
                             table.Status = DataStates.Idle;
                         }
@@ -553,7 +686,8 @@ namespace JHWork.DataMigration.Runner.Migration
                     ["mode"] = t.WriteMode == WriteModes.Append ? "Append" : "Update",
                     ["keyFields"] = t.KeyFields == null ? "" : string.Join(",", t.KeyFields),
                     ["skipFields"] = t.SkipFields == null ? "" : string.Join(",", t.SkipFields),
-                    ["filter"] = t.Filter
+                    ["filter"] = t.Filter,
+                    ["References"] = t.References == null ? "" : string.Join(",", t.References)
                 };
 
                 if (!t.SourceWhereSQL.Equals(t.DestWhereSQL))
@@ -578,7 +712,9 @@ namespace JHWork.DataMigration.Runner.Migration
                 ["port"] = source.Port,
                 ["user"] = source.User,
                 ["password"] = source.Pwd,
-                ["charset"] = source.CharSet
+                ["charset"] = source.CharSet,
+                ["compress"] = source.Compress ? 1 : 0,
+                ["encrypt"] = source.Encrypt ? 1 : 0
             };
             JObject dstDB = new JObject()
             {
@@ -587,7 +723,9 @@ namespace JHWork.DataMigration.Runner.Migration
                 ["port"] = dest.Port,
                 ["user"] = dest.User,
                 ["password"] = dest.Pwd,
-                ["charset"] = dest.CharSet
+                ["charset"] = dest.CharSet,
+                ["compress"] = dest.Compress ? 1 : 0,
+                ["encrypt"] = dest.Encrypt ? 1 : 0
             };
             JArray dbArray = new JArray();
             if (source.DB.Equals(dest.DB))

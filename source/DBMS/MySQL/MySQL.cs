@@ -563,7 +563,13 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
 
             foreach (TableFK fk in fks)
-                lst.Add(new TableInfo() { Name = fk.Name, KeyFields = fk.KeyFields, Order = fk.Order });
+                lst.Add(new TableInfo()
+                {
+                    Name = fk.Name,
+                    KeyFields = fk.KeyFields,
+                    Order = fk.Order,
+                    References = fk.FKs.ToArray()
+                });
 
             lst.Sort(new TableInfoComparer());
 
