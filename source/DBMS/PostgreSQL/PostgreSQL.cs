@@ -414,7 +414,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
+                errMsg = $"{table.DestName}：{ex.Message}";
                 Logger.WriteLogExcept(title, ex);
             }
 

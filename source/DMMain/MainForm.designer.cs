@@ -165,8 +165,8 @@
             // 
             // listView
             // 
-            this.listView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
-            | System.Windows.Forms.AnchorStyles.Left)
+            this.listView.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
             this.listView.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.listView.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
@@ -179,6 +179,7 @@
             this.listView.HideSelection = false;
             this.listView.Location = new System.Drawing.Point(0, 39);
             this.listView.Name = "listView";
+            this.listView.ShowItemToolTips = true;
             this.listView.Size = new System.Drawing.Size(784, 350);
             this.listView.SmallImageList = this.imageListItem;
             this.listView.StateImageList = this.imageStatus;

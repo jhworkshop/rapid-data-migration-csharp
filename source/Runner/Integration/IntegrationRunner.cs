@@ -199,29 +199,50 @@ namespace JHWork.DataMigration.Runner.Integration
                 return new IntegrationTable[][] { };
         }
 
-        private bool Connect(Database db, out IDBMSReader reader)
+        private bool Connect(Common.Task task, Database db, out IDBMSReader reader)
         {
             reader = DBMSFactory.GetDBMSReaderByName(db.DBMS);
             if (reader == null)
             {
-                Logger.WriteLog("系统", $"数据库类型 {db.DBMS} 不支持！");
+                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
+
+                Logger.WriteLog("系统", errMsg);
+                task.ErrorMsg = errMsg;
+
                 return false;
             }
             else
-                return reader.Connect(db);
+            {
+                bool rst = reader.Connect(db);
+
+                if (!rst) task.ErrorMsg = reader.GetLastError();
+
+                return rst;
+            }
         }
 
-        private bool Connect(Database db, out IDBMSWriter writer)
+        private bool Connect(Common.Task task, Database db, out IDBMSWriter writer)
         {
             writer = DBMSFactory.GetDBMSWriterByName(db.DBMS);
             if (writer == null)
             {
-                Logger.WriteLog("系统", $"数据库类型 {db.DBMS} 不支持！");
+                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
+
+                Logger.WriteLog("系统", errMsg);
+                task.ErrorMsg = errMsg;
+
                 return false;
             }
             else
-                return writer.Connect(db);
+            {
+                bool rst = writer.Connect(db);
+
+                if (!rst) task.ErrorMsg = writer.GetLastError();
+
+                return rst;
+            }
         }
+
 
         private static string[] CreateThreadAction()
         {
@@ -313,6 +334,7 @@ namespace JHWork.DataMigration.Runner.Integration
                             else
                             {
                                 task.Progress -= task.Table.Progress;
+                                task.ErrorMsg = reason;
                                 Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}",
                                     $"汇集失败！{reason}");
                                 Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "失败", reason);
@@ -325,6 +347,7 @@ namespace JHWork.DataMigration.Runner.Integration
                         catch (Exception ex)
                         {
                             task.Status = DataStates.Error;
+                            task.ErrorMsg = ex.Message;
                             Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", $"汇集失败！{ex.Message}");
                         }
                     }
@@ -431,7 +454,7 @@ namespace JHWork.DataMigration.Runner.Integration
             reason = "取消操作";
             if (status.IsStopped()) return;
 
-            if (Connect(task.Dest, out IDBMSWriter dest))
+            if (Connect(task, task.Dest, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -459,7 +482,7 @@ namespace JHWork.DataMigration.Runner.Integration
             else
             {
                 task.Status = DataStates.Error;
-                reason = "连接失败！";
+                reason = task.ErrorMsg;
             }
         }
 
@@ -489,10 +512,10 @@ namespace JHWork.DataMigration.Runner.Integration
                             Dictionary<string, object> tmpParams = new Dictionary<string, object>(parms);
 
                             // 连接数据源
-                            if (!Connect(db, out IDBMSReader source))
+                            if (!Connect(task, db, out IDBMSReader source))
                             {
                                 task.Status = DataStates.RunningError;
-                                reason = "连接失败！";
+                                reason = task.ErrorMsg;
                                 break;
                             }
 
@@ -617,11 +640,15 @@ namespace JHWork.DataMigration.Runner.Integration
                     task.Table.Total = 0;
                     task.Table.Progress = 0;
 
-                    if (Connect(task.Dest, out IDBMSWriter dest))
+                    if (Connect(task, task.Dest, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
-                        dest.QueryParam(task.Params, parms);
+                        if (!dest.QueryParam(task.Params, parms))
+                        {
+                            task.ErrorMsg = dest.GetLastError();
+                            break;
+                        }
 
                         Parallel.ForEach(CreateThreadAction(), act =>
                         {
@@ -632,7 +659,7 @@ namespace JHWork.DataMigration.Runner.Integration
                                 foreach (Database db in task.Sources)
                                 {
                                     if (task.Status != DataStates.Error && !status.IsStopped())
-                                        if (Connect(db, out source))
+                                        if (Connect(task, db, out source))
                                         {
                                             bool isError = true;
 
@@ -651,7 +678,11 @@ namespace JHWork.DataMigration.Runner.Integration
                                                 }
                                             }
 
-                                            if (isError) task.Status = DataStates.Error;
+                                            if (isError)
+                                            {
+                                                task.Status = DataStates.Error;
+                                                task.ErrorMsg = source.GetLastError();
+                                            }
                                             source.Close();
                                         }
                                         else
@@ -663,7 +694,10 @@ namespace JHWork.DataMigration.Runner.Integration
                                 if (dest.GetFieldNames(task.Table.DestName, out string[] fields))
                                     task.Table.DestFields = fields;
                                 else
+                                {
                                     task.Status = DataStates.Error;
+                                    task.ErrorMsg = dest.GetLastError();
+                                }
                                 dest.Close();
                             }
                         });

@@ -448,7 +448,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
+                errMsg = $"{table.DestName}：{ex.Message}";
                 Logger.WriteLogExcept(title, ex);
             }
 

@@ -326,13 +326,13 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     bulk.Columns.AddRange(obj.Fields);
 
                     count = (uint)bulk.Load();
-                    if (count == 0) errMsg = "写入记录数为零！";
+                    if (count == 0) errMsg = $"{table.DestName}：写入记录数为零！";
 
                     return count > 0;
                 }
                 catch (Exception ex)
                 {
-                    errMsg = ex.Message;
+                    errMsg = $"{table.DestName}：{ex.Message}";
                     Logger.WriteLogExcept(title, ex);
                 }
             }

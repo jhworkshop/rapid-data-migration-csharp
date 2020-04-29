@@ -175,28 +175,48 @@ namespace JHWork.DataMigration.Runner.Migration
             task.Name = $"{task.Source.DB} -> {task.Dest.DB}";
         }
 
-        private bool Connect(Database db, out IDBMSReader reader)
+        private bool Connect(Common.Task task, Database db, out IDBMSReader reader)
         {
             reader = DBMSFactory.GetDBMSReaderByName(db.DBMS);
             if (reader == null)
             {
-                Logger.WriteLog("系统", $"数据库类型 {db.DBMS} 不支持！");
+                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
+
+                Logger.WriteLog("系统", errMsg);
+                task.ErrorMsg = errMsg;
+
                 return false;
             }
             else
-                return reader.Connect(db);
+            {
+                bool rst = reader.Connect(db);
+
+                if (!rst) task.ErrorMsg = reader.GetLastError();
+
+                return rst;
+            }
         }
 
-        private bool Connect(Database db, out IDBMSWriter writer)
+        private bool Connect(Common.Task task, Database db, out IDBMSWriter writer)
         {
             writer = DBMSFactory.GetDBMSWriterByName(db.DBMS);
             if (writer == null)
             {
-                Logger.WriteLog("系统", $"数据库类型 {db.DBMS} 不支持！");
+                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
+
+                Logger.WriteLog("系统", errMsg);
+                task.ErrorMsg = errMsg;
+
                 return false;
             }
             else
-                return writer.Connect(db);
+            {
+                bool rst = writer.Connect(db);
+
+                if (!rst) task.ErrorMsg = writer.GetLastError();
+
+                return rst;
+            }
         }
 
         private string[] CreateThreadAction()
@@ -293,6 +313,7 @@ namespace JHWork.DataMigration.Runner.Migration
                                 else
                                 {
                                     task.Status = DataStates.RunningError;
+                                    task.ErrorMsg = reason;
                                     task.Progress -= table.Progress;
                                     Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}",
                                         $"迁移失败！{reason}");
@@ -318,6 +339,7 @@ namespace JHWork.DataMigration.Runner.Migration
                     catch (Exception ex)
                     {
                         task.Status = DataStates.Error;
+                        task.ErrorMsg = ex.Message;
                         Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", $"迁移失败！{ex.Message}");
                     }
                     task.StartTick = WinAPI.GetTickCount() - task.StartTick;
@@ -436,7 +458,7 @@ namespace JHWork.DataMigration.Runner.Migration
             reason = "取消操作";
             if (status.IsStopped()) return;
 
-            if (Connect(task.Source, out IDBMSReader source) && Connect(task.Dest, out IDBMSWriter dest))
+            if (Connect(task, task.Source, out IDBMSReader source) && Connect(task, task.Dest, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -580,7 +602,8 @@ namespace JHWork.DataMigration.Runner.Migration
                     task.Progress = 0;
                     task.Total = 0;
                     task.Status = DataStates.Running;
-                    if (Connect(task.Source, out IDBMSReader source) && Connect(task.Dest, out IDBMSWriter dest))
+                    if (Connect(task, task.Source, out IDBMSReader source)
+                        && Connect(task, task.Dest, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -636,14 +659,21 @@ namespace JHWork.DataMigration.Runner.Migration
                         }
                     }
 
-                    if (isError) table.Status = DataStates.Error;
+                    if (isError)
+                    {
+                        table.Status = DataStates.Error;
+                        task.ErrorMsg = source.GetLastError();
+                    }
                 }
                 else if ("write".Equals(act))
                 {
                     if (dest.GetFieldNames(table.DestName, out string[] fields))
                         table.DestFields = fields;
                     else
+                    {
                         table.Status = DataStates.Error;
+                        task.ErrorMsg = dest.GetLastError();
+                    }
                 }
             });
         }

@@ -226,6 +226,10 @@ namespace JHWork.DataMigration
                     else
                         item.SubItems[4].Text = (task.StartTick / 1000.0).ToString("#,##0.0");
                     item.StateImageIndex = DetermineImageIndex(task.Status);
+                    if (task.Status == DataStates.Error || task.Status == DataStates.RunningError)
+                        item.ToolTipText = task.ErrorMsg;
+                    else
+                        item.ToolTipText = "";
                 }
 
             if (executor.State == ExecutorState.Planning)

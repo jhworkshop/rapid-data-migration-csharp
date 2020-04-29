@@ -98,6 +98,7 @@ namespace JHWork.DataMigration.Common
         public ulong Total { get; set; }       // 总记录数
         public DataStates Status { get; set; } // 状态
         public ulong StartTick { get; set; }   // 开始时间
+        public string ErrorMsg { get; set; }   // 错误信息
     }
 
     /// <summary>
