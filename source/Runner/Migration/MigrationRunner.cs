@@ -303,7 +303,6 @@ namespace JHWork.DataMigration.Runner.Migration
                             {
                                 Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移开始...");
 
-                                lock (runList) { runList.Add(table); }
                                 MigrateTable(task, table, out string reason);
                                 if (table.Status == DataStates.Done)
                                 {
@@ -356,7 +355,7 @@ namespace JHWork.DataMigration.Runner.Migration
         {
             while (true)
             {
-                lock (lst)
+                lock (runList)
                 {
                     int dependCount = 0;
                     // 先从依赖树取
@@ -371,6 +370,7 @@ namespace JHWork.DataMigration.Runner.Migration
                                 MigrationTable rst = lst[i][j];
 
                                 lst[i].RemoveAt(j);
+                                runList.Add(rst);
 
                                 return rst;
                             }
@@ -392,15 +392,12 @@ namespace JHWork.DataMigration.Runner.Migration
                                     }
                                     if (inTree) break;
 
-                                    lock (runList)
-                                    {
-                                        for (int k = 0; k < runList.Count; k++)
-                                            if (s.Equals(runList[k].DestName))
-                                            {
-                                                inTree = true;
-                                                break;
-                                            }
-                                    }
+                                    for (int k = 0; k < runList.Count; k++)
+                                        if (s.Equals(runList[k].DestName))
+                                        {
+                                            inTree = true;
+                                            break;
+                                        }
                                 }
 
                                 if (!inTree)
@@ -408,6 +405,7 @@ namespace JHWork.DataMigration.Runner.Migration
                                     MigrationTable rst = lst[i][j];
 
                                     lst[i].RemoveAt(j);
+                                    runList.Add(rst);
 
                                     return rst;
                                 }
@@ -421,6 +419,7 @@ namespace JHWork.DataMigration.Runner.Migration
                         MigrationTable rst = lst[0][0];
 
                         lst[0].RemoveAt(0);
+                        runList.Add(rst);
 
                         return rst;
                     }

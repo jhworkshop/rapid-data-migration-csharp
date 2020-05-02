@@ -323,7 +323,7 @@ namespace JHWork.DataMigration.Runner.Integration
 
                             task.StartTick = WinAPI.GetTickCount();
                             task.Status = DataStates.Running;
-                            lock (runList) { runList.Add(task); }
+
                             IntegrateTask(task, out string reason);
                             if (task.Status == DataStates.Done)
                             {
@@ -373,7 +373,7 @@ namespace JHWork.DataMigration.Runner.Integration
         {
             while (true)
             {
-                lock (lst)
+                lock (runList)
                 {
                     int dependCount = 0;
                     // 先从依赖树取
@@ -388,6 +388,7 @@ namespace JHWork.DataMigration.Runner.Integration
                                 IntegrationTask rst = lst[i][j];
 
                                 lst[i].RemoveAt(j);
+                                runList.Add(rst);
 
                                 return rst;
                             }
@@ -409,15 +410,12 @@ namespace JHWork.DataMigration.Runner.Integration
                                     }
                                     if (inTree) break;
 
-                                    lock (runList)
-                                    {
-                                        for (int k = 0; k < runList.Count; k++)
-                                            if (s.Equals(runList[k].Table.DestName))
-                                            {
-                                                inTree = true;
-                                                break;
-                                            }
-                                    }
+                                    for (int k = 0; k < runList.Count; k++)
+                                        if (s.Equals(runList[k].Table.DestName))
+                                        {
+                                            inTree = true;
+                                            break;
+                                        }
                                 }
 
                                 if (!inTree)
@@ -425,6 +423,7 @@ namespace JHWork.DataMigration.Runner.Integration
                                     IntegrationTask rst = lst[i][j];
 
                                     lst[i].RemoveAt(j);
+                                    runList.Add(rst);
 
                                     return rst;
                                 }
@@ -438,6 +437,7 @@ namespace JHWork.DataMigration.Runner.Integration
                         IntegrationTask rst = lst[0][0];
 
                         lst[0].RemoveAt(0);
+                        runList.Add(rst);
 
                         return rst;
                     }
