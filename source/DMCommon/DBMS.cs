@@ -122,18 +122,6 @@ namespace JHWork.DataMigration.Common
         /// <param name="fieldNames">字段名称清单</param>
         /// <returns>成功获取则返回 true，否则返回 false</returns>
         bool GetFieldNames(string tableName, out string[] fieldNames);
-
-        /// <summary>
-        /// 统计记录数
-        /// </summary>
-        /// <param name="tableName">表名</param>
-        /// <param name="whereSQL">条件</param>
-        /// <param name="with">WITH 条件</param>
-        /// <param name="parms">参数</param>
-        /// <param name="count">记录数</param>
-        /// <returns>成功统计则返回 true，并返回记录数，否则返回 false</returns>
-        bool QueryCount(string tableName, string whereSQL, WithEnums with, Dictionary<string, object> parms,
-            out ulong count);
     }
 
     /// <summary>
@@ -141,6 +129,16 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public interface IDBMSReader : IDBMSRWBase
     {
+        /// <summary>
+        /// 统计记录数
+        /// </summary>
+        /// <param name="table">表配置</param>
+        /// <param name="with">WITH 条件</param>
+        /// <param name="parms">参数</param>
+        /// <param name="count">记录数</param>
+        /// <returns>成功统计则返回 true，并返回记录数，否则返回 false</returns>
+        bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count);
+
         /// <summary>
         /// 分页查询
         /// </summary>

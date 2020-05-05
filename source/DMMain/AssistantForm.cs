@@ -222,8 +222,7 @@ namespace JHWork.DataMigration
                         Order = info.Order,
                         PageSize = 100,
                         OrderSQL = info.KeyFields.Length == 0 ? "" : string.Join(" ASC, ", info.KeyFields) + " ASC",
-                        SourceWhereSQL = "",
-                        DestWhereSQL = "",
+                        WhereSQL = "",
                         WriteMode = WriteModes.Append,
                         KeyFields = info.KeyFields,
                         SkipFields = { },
@@ -240,8 +239,7 @@ namespace JHWork.DataMigration
                             sourceName = importedTables[i].SourceName;
                             table.PageSize = importedTables[i].PageSize;
                             table.OrderSQL = importedTables[i].OrderSQL;
-                            table.SourceWhereSQL = importedTables[i].SourceWhereSQL;
-                            table.DestWhereSQL = importedTables[i].DestWhereSQL;
+                            table.WhereSQL = importedTables[i].WhereSQL;
                             table.WriteMode = importedTables[i].WriteMode;
                             table.SkipFields = importedTables[i].SkipFields;
                             table.Filter = importedTables[i].Filter;

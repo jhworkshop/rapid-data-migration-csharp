@@ -674,14 +674,19 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        private string ProcessFieldName(string fieldName)
+        private string ProcessFieldName(string fieldName, string prefix = "")
         {
-            if (string.IsNullOrEmpty(fieldName))
-                return "";
-            else if (fieldName.StartsWith("["))
-                return fieldName;
+            if (string.IsNullOrEmpty(fieldName)) return "";
+
+            if (prefix == null)
+                prefix = "";
+            else if (prefix.Length > 0)
+                prefix += ".";
+
+            if (fieldName.StartsWith("["))
+                return prefix + fieldName;
             else
-                return $"[{fieldName}]";
+                return prefix + $"[{fieldName}]";
         }
 
         private string ProcessFieldNames(string[] fields, string prefix = "")
@@ -718,7 +723,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        private string ProcessTableName(string tableName, WithEnums with = WithEnums.None, string prefix = "")
+        private string ProcessTableName(string tableName, WithEnums with = WithEnums.None, string alias = "")
         {
             if (string.IsNullOrEmpty(tableName))
                 return "";
@@ -727,8 +732,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 if (!tableName.StartsWith("["))
                     tableName = $"[{tableName}]";
 
-                if (!string.IsNullOrEmpty(prefix))
-                    tableName += prefix;
+                if (!string.IsNullOrEmpty(alias))
+                    tableName += $" {alias}";
 
                 string s = "";
 
@@ -768,14 +773,18 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
         }
 
-        public bool QueryCount(string tableName, string whereSQL, WithEnums with, Dictionary<string, object> parms,
+        public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms,
             out ulong count)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("SELECT COUNT(*) AS '_ROW_COUNT_' FROM ").Append(ProcessTableName(tableName, with));
+                .Append("SELECT COUNT(*) AS '_ROW_COUNT_' FROM ").Append(ProcessTableName(table.SourceName, with));
 
-            if (!string.IsNullOrEmpty(whereSQL))
-                sb.Append(" WHERE ").Append(whereSQL);
+            if (!string.IsNullOrEmpty(table.WhereSQL))
+            {
+                if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                    sb.Append(" WHERE");
+                sb.Append($" {table.WhereSQL}");
+            }
 
             count = 0;
             if (Query(sb.ToString(), parms, out IDataWrapper data))
@@ -838,43 +847,42 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             {
                 string tableName = ProcessTableName(table.SourceName, with);
                 string keyField = ProcessFieldName(table.KeyFields[0]);
+                string keyFieldWithPrefix = ProcessFieldName(table.KeyFields[0], ProcessTableName(table.SourceName));
 
                 // 查询最大键值
                 sb.Append($"SELECT MAX({keyField}) AS '_MaxKey_' FROM (")
-                    .Append($"SELECT TOP {toRow - fromRow + 1} {keyField} FROM {tableName}");
-                if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
-                {
-                    sb.Append(" WHERE ");
-                    if (parms.ContainsKey("LastMaxKey"))
+                    .Append($"SELECT TOP {toRow - fromRow + 1} {keyFieldWithPrefix} FROM {tableName}");
+                if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        sb.Append($"{keyField} > @LastMaxKey");
-                        if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                            sb.Append(" AND ").Append(table.SourceWhereSQL);
+                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" WHERE");
+                        sb.Append(" ").Append(table.WhereSQL);
+                        if (parms.ContainsKey("LastMaxKey"))
+                            sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
                     }
                     else
-                        sb.Append(table.SourceWhereSQL);
-                }
-                sb.Append($" ORDER BY {keyField} ASC) A");
+                        sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
+                sb.Append($" ORDER BY {keyFieldWithPrefix} ASC) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
 
                     sb.Length = 0;
                     sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableName}");
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
-                    {
-                        sb.Append(" WHERE ");
-                        if (parms.ContainsKey("LastMaxKey"))
+                    if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
+                        if (!string.IsNullOrEmpty(table.WhereSQL))
                         {
-                            sb.Append($"{keyField} > @LastMaxKey");
-                            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                                sb.Append(" AND ").Append(table.SourceWhereSQL);
+                            if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                                sb.Append(" WHERE");
+                            sb.Append(" ").Append(table.WhereSQL);
+                            if (parms.ContainsKey("LastMaxKey"))
+                                sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
                         }
                         else
-                            sb.Append(table.SourceWhereSQL);
-                    }
-                    sb.Append($" ORDER BY {keyField} ASC");
+                            sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
+                    sb.Append($" ORDER BY {keyFieldWithPrefix} ASC");
 
                     bool rst = Query(sb.ToString(), parms, out reader);
 
@@ -911,14 +919,19 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     string tableName = ProcessTableName(table.SourceName, with);
                     string tableNameWithB = ProcessTableName(table.SourceName, with, "B");
                     string keyFields = ProcessFieldNames(table.KeyFields);
+                    string keyFieldsWithAlias = ProcessFieldNames(table.KeyFields, ProcessTableName(table.SourceName));
                     string keyField = ProcessFieldName(table.KeyFields[0]);
 
                     sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT {keyFields} FROM")
-                        .Append($" (SELECT {keyFields}, ROW_NUMBER() OVER (ORDER BY {table.OrderSQL}) AS '_RowNum_'")
-                        .Append($" FROM {tableName}");
+                        .Append($" (SELECT {keyFieldsWithAlias}, ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
+                        .Append($" AS '_RowNum_' FROM {tableName}");
 
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                        sb.Append($" WHERE {table.SourceWhereSQL}");
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
+                    {
+                        if (table.WhereSQL.IndexOf("WEHRE", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" WHERE");
+                        sb.Append($" {table.WhereSQL}");
+                    }
 
                     sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}) A ON B.{keyField} = A.{keyField}");
 
@@ -931,12 +944,17 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 else
                 {
                     string fieldsSQL = ProcessFieldNames(table.SourceFields);
+                    string fieldsWithAlias = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
 
                     sb.Append($"SELECT {fieldsSQL} FROM (SELECT ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
-                        .Append($" AS '_RowNum_', {fieldsSQL} FROM {ProcessTableName(table.SourceName, with)}");
+                        .Append($" AS '_RowNum_', {fieldsWithAlias} FROM {ProcessTableName(table.SourceName, with)}");
 
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                        sb.Append($" WHERE {table.SourceWhereSQL}");
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
+                    {
+                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" WHERE");
+                        sb.Append($" {table.WhereSQL}");
+                    }
 
                     sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}");
                 }
@@ -952,17 +970,21 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // WHERE <B.keyFields[0]> IS NULL
                 // {AND <whereSQL>}
                 // ORDER BY <orderSQL>
-                string fieldsSQL = ProcessFieldNames(table.SourceFields, table.SourceName);
-                string keyFieldsSQL = ProcessFieldNames(table.KeyFields);
                 string tableName = ProcessTableName(table.SourceName);
                 string tableNameWith = ProcessTableName(table.SourceName, with);
+                string fieldsSQL = ProcessFieldNames(table.SourceFields, tableName);
+                string keyFieldsSQL = ProcessFieldNames(table.KeyFields);
                 string keyField = ProcessFieldName(table.KeyFields[0]);
 
                 sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableNameWith}")
                     .Append($" LEFT JOIN (SELECT TOP {fromRow - 1} {keyFieldsSQL} FROM {tableNameWith}");
 
-                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                    sb.Append($" WHERE {table.SourceWhereSQL}");
+                if (!string.IsNullOrEmpty(table.WhereSQL))
+                {
+                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" WHERE");
+                    sb.Append($" {table.WhereSQL}");
+                }
 
                 sb.Append($" ORDER BY {table.OrderSQL}) B ON ").Append($"{tableName}.{keyField} = B.{keyField}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
@@ -970,10 +992,15 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     keyField = ProcessFieldName(table.KeyFields[i]);
                     sb.Append($" AND {tableName}.{keyField} = B.{keyField}");
                 }
-                sb.Append($" WHERE B.{keyField} IS NULL");
+                if (!string.IsNullOrEmpty(table.WhereSQL))
+                {
+                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" WHERE");
+                    sb.Append($" {table.WhereSQL} AND B.{keyField} IS NULL");
+                }
+                else
+                    sb.Append($" WHERE B.{keyField} IS NULL");
 
-                if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                    sb.Append($" AND {table.SourceWhereSQL}");
 
                 sb.Append($" ORDER BY {table.OrderSQL}");
             }

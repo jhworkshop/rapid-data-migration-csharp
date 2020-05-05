@@ -130,7 +130,6 @@
             "order": 100,                                                 # 执行次序，A-Z 排序，相同次序的可并行处理
             "orderSQL": "FolioID ASC",                                    # 取数排序脚本，分页取数，要求稳定的排序逻辑
             "whereSQL": "FolioState IN (2, 3, 5) AND AccDate < @AccDate", # 取数条件，可带参数
-            "destWhereSQL": "",                                           # 迁移后用于校验记录数的条件，默认 whereSQL
             "pageSize": 1000,                                             # 取数每页记录数
             "mode": "Append",                                             # 数据模式，可以是 Append，或者 Update
             "keyFields": "FolioID",                                       # 关键字段，多个字段之间用逗号分隔

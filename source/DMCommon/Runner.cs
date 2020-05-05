@@ -44,8 +44,7 @@ namespace JHWork.DataMigration.Common
         public int Order { get; set; }              // 排序，从小到大
         public uint PageSize { get; set; }          // 每批次记录数
         public string OrderSQL { get; set; }        // 排序脚本
-        public string SourceWhereSQL { get; set; }  // 源表条件脚本
-        public string DestWhereSQL { get; set; }    // 目标表条件脚本
+        public string WhereSQL { get; set; }        // 条件脚本
         public WriteModes WriteMode { get; set; }   // 写入模式
         public string[] KeyFields { get; set; }     // 主键字段
         public string[] SkipFields { get; set; }    // 跳过字段

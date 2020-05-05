@@ -141,9 +141,7 @@ namespace JHWork.DataMigration.Runner.Integration
                     DestName = names.Length > 1 ? names[1] : names[0],
                     Order = int.Parse(o["order"].ToString()),
                     OrderSQL = o["orderSQL"].ToString(),
-                    SourceWhereSQL = o["whereSQL"].ToString(),
-                    DestWhereSQL = o.ContainsKey("destWhereSQL") ? o["destWhereSQL"].ToString()
-                        : o["whereSQL"].ToString(),
+                    WhereSQL = o["whereSQL"].ToString(),
                     PageSize = uint.Parse(o["pageSize"].ToString()),
                     WriteMode = "UPDATE".Equals(o["mode"].ToString().ToUpper()) ? WriteModes.Update
                         : WriteModes.Append,
@@ -669,8 +667,7 @@ namespace JHWork.DataMigration.Runner.Integration
                                                 task.Table.SourceFields = fields;
 
                                                 // #2: 获取记录数
-                                                if (source.QueryCount(task.Table.SourceName, task.Table.SourceWhereSQL,
-                                                    WithEnums.NoLock, parms, out ulong count))
+                                                if (source.QueryCount(task.Table, WithEnums.NoLock, parms, out ulong count))
                                                 {
                                                     task.Total += count;
                                                     task.Table.Total += count;
@@ -736,7 +733,7 @@ namespace JHWork.DataMigration.Runner.Integration
                     ["name"] = t.SourceName.Equals(t.DestName) ? t.SourceName : $"{t.SourceName},{t.DestName}",
                     ["order"] = t.Order,
                     ["orderSQL"] = t.OrderSQL,
-                    ["whereSQL"] = t.SourceWhereSQL,
+                    ["whereSQL"] = t.WhereSQL,
                     ["pageSize"] = t.PageSize,
                     ["mode"] = t.WriteMode == WriteModes.Append ? "Append" : "Update",
                     ["keyFields"] = t.KeyFields == null ? "" : string.Join(",", t.KeyFields),
@@ -744,9 +741,6 @@ namespace JHWork.DataMigration.Runner.Integration
                     ["filter"] = t.Filter,
                     ["References"] = t.References == null ? "" : string.Join(",", t.References)
                 };
-
-                if (!t.SourceWhereSQL.Equals(t.DestWhereSQL))
-                    obj["destWhereSQL"] = t.DestWhereSQL;
 
                 tableArray.Add(obj);
             }

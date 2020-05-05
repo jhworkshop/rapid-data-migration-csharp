@@ -96,9 +96,7 @@ namespace JHWork.DataMigration.Runner.Migration
                     DestName = names.Length > 1 ? names[1] : names[0],
                     Order = int.Parse(o["order"].ToString()),
                     OrderSQL = o["orderSQL"].ToString(),
-                    SourceWhereSQL = o["whereSQL"].ToString(),
-                    DestWhereSQL = o.ContainsKey("destWhereSQL") ? o["destWhereSQL"].ToString()
-                        : o["whereSQL"].ToString(),
+                    WhereSQL = o["whereSQL"].ToString(),
                     PageSize = uint.Parse(o["pageSize"].ToString()),
                     WriteMode = "UPDATE".Equals(o["mode"].ToString().ToUpper()) ? WriteModes.Update
                         : WriteModes.Append,
@@ -307,7 +305,8 @@ namespace JHWork.DataMigration.Runner.Migration
                                 if (table.Status == DataStates.Done)
                                 {
                                     Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移成功。");
-                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "成功", reason);
+                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "成功",
+                                        table.Progress.ToString("#,##0"));
                                 }
                                 else
                                 {
@@ -467,11 +466,6 @@ namespace JHWork.DataMigration.Runner.Migration
                 {
                     // 迁移数据
                     MigrateTableWithScript(task, table, parms, source, dest, out reason);
-
-                    // 迁移后校验
-                    if (table.Status != DataStates.Error && !status.IsStopped())
-                        SummateTable(table, parms, source, dest, out reason);
-
                     if (table.Status != DataStates.Error && !status.IsStopped())
                     {
                         dest.CommitTransaction();
@@ -648,8 +642,7 @@ namespace JHWork.DataMigration.Runner.Migration
                         table.SourceFields = fields;
 
                         // #2: 获取待迁移记录数
-                        if (source.QueryCount(table.SourceName, table.SourceWhereSQL, WithEnums.NoLock, parms,
-                            out ulong count))
+                        if (source.QueryCount(table, WithEnums.NoLock, parms, out ulong count))
                         {
                             table.Progress = 0;
                             task.Total += count;
@@ -710,7 +703,7 @@ namespace JHWork.DataMigration.Runner.Migration
                     ["name"] = t.SourceName.Equals(t.DestName) ? t.SourceName : $"{t.SourceName},{t.DestName}",
                     ["order"] = t.Order,
                     ["orderSQL"] = t.OrderSQL,
-                    ["whereSQL"] = t.SourceWhereSQL,
+                    ["whereSQL"] = t.WhereSQL,
                     ["pageSize"] = t.PageSize,
                     ["mode"] = t.WriteMode == WriteModes.Append ? "Append" : "Update",
                     ["keyFields"] = t.KeyFields == null ? "" : string.Join(",", t.KeyFields),
@@ -718,9 +711,6 @@ namespace JHWork.DataMigration.Runner.Migration
                     ["filter"] = t.Filter,
                     ["References"] = t.References == null ? "" : string.Join(",", t.References)
                 };
-
-                if (!t.SourceWhereSQL.Equals(t.DestWhereSQL))
-                    obj["destWhereSQL"] = t.DestWhereSQL;
 
                 tableArray.Add(obj);
             }
@@ -782,44 +772,6 @@ namespace JHWork.DataMigration.Runner.Migration
             };
 
             WriteFile($"{path}Profile-{file}", JsonConvert.SerializeObject(profileData, Formatting.Indented));
-        }
-
-        private void SummateTable(MigrationTable table, Dictionary<string, object> parms, IDBMSReader source,
-            IDBMSWriter dest, out string failReason)
-        {
-            ulong sourceCount = 0, destCount = 0;
-            string reason = "";
-
-            Parallel.ForEach(CreateThreadAction(), act =>
-            {
-                if ("read".Equals(act))
-                {
-                    if (!source.QueryCount(table.SourceName, table.SourceWhereSQL, WithEnums.NoLock, parms,
-                        out sourceCount))
-                    {
-                        table.Status = DataStates.Error;
-                        reason = source.GetLastError();
-                    }
-                }
-                else if ("write".Equals(act))
-                {
-                    if (!dest.QueryCount(table.DestName, table.DestWhereSQL, WithEnums.NoLock, parms,
-                        out destCount))
-                    {
-                        table.Status = DataStates.Error;
-                        reason = dest.GetLastError();
-                    }
-                }
-            });
-
-            if (table.Status == DataStates.Error) failReason = reason;
-            else if (sourceCount != destCount)
-            {
-                table.Status = DataStates.Error;
-                failReason = $"{table.DestName} 数据校验失败！源数量：{sourceCount:#,##0}，目标数量：{destCount:#,##0}。";
-            }
-            else
-                failReason = sourceCount.ToString("#,##0");
         }
 
         private void WriteFile(string file, string content)

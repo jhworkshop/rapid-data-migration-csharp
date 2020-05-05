@@ -159,7 +159,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             string destTable = ProcessTableName(table.DestName);
             string tmpTable = $"\"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}\"";
             StringBuilder sb = new StringBuilder();
-            string[] fields = ExcludeFields(ExcludeFields(table.DestFields, table.KeyFields), table.SkipFields);
+            string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(fields[0]);
 
             sb.Append("update ").Append(destTable).Append(" A set ").Append(field).Append(" = B.").Append(field);
@@ -329,96 +329,35 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
+        private string[] ExcludeFields(string[] fields, string[] skipFields, string[] skipFields2)
+        {
+            List<string> skipList = new List<string>();
+
+            if (skipFields != null && skipFields.Length != 0)
+                foreach (string s in skipFields)
+                    skipList.Add(s.ToLower());
+
+            if (skipFields2 != null && skipFields2.Length != 0)
+                foreach (string s in skipFields2)
+                    skipList.Add(s.ToLower());
+
+            if (skipList.Count == 0)
+                return fields;
+            else
+            {
+                List<string> lst = new List<string>();
+
+                foreach (string s in fields)
+                    if (!skipList.Contains(s.ToLower()))
+                        lst.Add(s);
+
+                return lst.ToArray();
+            }
+        }
+
         public bool ExecScript(Table table, object script, out uint count)
         {
-            count = 0;
-            try
-            {
-                if (script is DataTable dt)
-                {
-                    using (NpgsqlBinaryImporter writer = conn.BeginBinaryImport(
-                        $"copy {ProcessTableName(table.DestName)} from stdin binary"))
-                    {
-                        foreach (DataRow row in dt.Rows)
-                        {
-                            object[] values = row.ItemArray;
-
-                            writer.StartRow();
-                            for (int i = 0; i < values.Length; i++)
-                            {
-                                object value = values[i];
-
-                                if (value == DBNull.Value || value == null)
-                                    writer.WriteNull();
-                                else if (dt.Columns[i].DataType == typeof(bool))
-                                    writer.Write((bool)value, NpgsqlDbType.Bit);
-                                else
-                                    writer.Write(value);
-                            }
-                        }
-                    }
-
-                    count = (uint)dt.Rows.Count;
-
-                    return true;
-                }
-                else if (script is MergeScript ms)
-                {
-                    if (Execute(ms.PrepareSQL, null, out _))
-                        try
-                        {
-                            using (NpgsqlBinaryImporter writer = conn.BeginBinaryImport(
-                                $"copy {ProcessTableName(ms.TableName)} from stdin binary"))
-                            {
-                                foreach (DataRow row in ms.Data.Rows)
-                                {
-                                    object[] values = row.ItemArray;
-
-                                    writer.StartRow();
-                                    for (int i = 0; i < values.Length; i++)
-                                    {
-                                        object value = values[i];
-
-                                        if (value == DBNull.Value || value == null)
-                                            writer.WriteNull();
-                                        else if (ms.Data.Columns[i].DataType == typeof(bool))
-                                            writer.Write((bool)value, NpgsqlDbType.Bit);
-                                        else
-                                            writer.Write(value);
-                                    }
-                                }
-                            }
-
-                            if (Execute(ms.UpdateSQL, null, out _) && Execute(ms.InsertSQL, null, out _))
-                            {
-                                count = (uint)ms.Data.Rows.Count;
-
-                                return true;
-                            }
-                        }
-                        finally
-                        {
-                            Execute(ms.CleanSQL, null, out _);
-                        }
-                }
-                else if (script is UpdateScript sql)
-                {
-                    if (Execute(sql.UpdateSQL, null, out count))
-                        if (count == 0)
-                            return Execute(sql.InsertSQL, null, out count);
-                        else
-                            return true;
-                }
-                else if (script is string)
-                    return Execute((string)script, null, out count);
-            }
-            catch (Exception ex)
-            {
-                errMsg = $"{table.DestName}：{ex.Message}";
-                Logger.WriteLogExcept(title, ex);
-            }
-
-            return false;
+            return InternalExecScript(table.DestName, script, out count);
         }
 
         private bool Execute(string sql, Dictionary<string, object> parms, out uint count)
@@ -621,6 +560,72 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         }
 
+        private bool InternalExecScript(string table, object script, out uint count)
+        {
+            count = 0;
+            try
+            {
+                if (script is DataTable dt)
+                {
+                    using (NpgsqlBinaryImporter writer = conn.BeginBinaryImport(
+                        $"copy {ProcessTableName(table)} from stdin binary"))
+                    {
+                        foreach (DataRow row in dt.Rows)
+                        {
+                            object[] values = row.ItemArray;
+
+                            writer.StartRow();
+                            for (int i = 0; i < values.Length; i++)
+                            {
+                                object value = values[i];
+
+                                if (value == DBNull.Value || value == null)
+                                    writer.WriteNull();
+                                else if (dt.Columns[i].DataType == typeof(bool))
+                                    writer.Write((bool)value, NpgsqlDbType.Bit);
+                                else
+                                    writer.Write(value);
+                            }
+                        }
+                    }
+
+                    count = (uint)dt.Rows.Count;
+
+                    return true;
+                }
+                else if (script is MergeScript ms)
+                {
+                    if (Execute(ms.PrepareSQL, null, out _))
+                        try
+                        {
+                            return InternalExecScript(ms.TableName, ms.Data, out count)
+                                && Execute(ms.UpdateSQL, null, out _) && Execute(ms.InsertSQL, null, out _);
+                        }
+                        finally
+                        {
+                            Execute(ms.CleanSQL, null, out _);
+                        }
+                }
+                else if (script is UpdateScript sql)
+                {
+                    if (Execute(sql.UpdateSQL, null, out count))
+                        if (count == 0)
+                            return Execute(sql.InsertSQL, null, out count);
+                        else
+                            return true;
+                }
+                else if (script is string)
+                    return Execute((string)script, null, out count);
+            }
+            catch (Exception ex)
+            {
+                errMsg = $"{table}：{ex.Message}";
+                Logger.WriteLogExcept(title, ex);
+            }
+
+            return false;
+        }
+
         private string[] ModifyFields(string[] fields, string[] skipFields, string prefix)
         {
             if (skipFields == null || skipFields.Length == 0)
@@ -642,9 +647,16 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        private string ProcessFieldName(string fieldName)
+        private string ProcessFieldName(string fieldName, string prefix = "")
         {
-            return $"\"{fieldName}\"";
+            if (string.IsNullOrEmpty(fieldName)) return "";
+
+            if (prefix == null)
+                prefix = "";
+            else if (prefix.Length > 0)
+                prefix += ".";
+
+            return $"{prefix}\"{fieldName}\"";
         }
 
         private string ProcessFieldNames(string[] fields, string prefix = "")
@@ -711,14 +723,17 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
 
         }
-        public bool QueryCount(string tableName, string whereSQL, WithEnums with, Dictionary<string, object> parms,
-            out ulong count)
+        public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("select count(*) as _row_count_ from ").Append(ProcessTableName(tableName));
+                .Append("select count(*) as _row_count_ from ").Append(ProcessTableName(table.SourceName));
 
-            if (!string.IsNullOrEmpty(whereSQL))
-                sb.Append(" where ").Append(whereSQL);
+            if (!string.IsNullOrEmpty(table.WhereSQL))
+            {
+                if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                    sb.Append(" where");
+                sb.Append($" {table.WhereSQL}");
+            }
 
             count = 0;
             if (Query(sb.ToString(), parms, out IDataWrapper data))
@@ -790,41 +805,40 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             if (table.KeyFields.Length == 1)
             {
                 string keyField = ProcessFieldName(table.KeyFields[0]);
+                string keyFieldWithPrefix = ProcessFieldName(table.KeyFields[0], tableName);
 
                 // 查询最大键值
-                sb.Append($"select max({keyField}) as \"_MaxKey_\" from (select {keyField} from {tableName}");
-                if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
-                {
-                    sb.Append(" where ");
-                    if (parms.ContainsKey("LastMaxKey"))
+                sb.Append($"select max({keyField}) as \"_MaxKey_\" from (select {keyFieldWithPrefix} from {tableName}");
+                if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        sb.Append($"{keyField} > @LastMaxKey");
-                        if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                            sb.Append(" and ").Append(table.SourceWhereSQL);
+                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" where");
+                        sb.Append(" ").Append(table.WhereSQL);
+                        if (parms.ContainsKey("LastMaxKey"))
+                            sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
                     }
                     else
-                        sb.Append(table.SourceWhereSQL);
-                }
+                        sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
                 sb.Append($" order by {keyField} limit {toRow - fromRow + 1}) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, tableName);
 
                     sb.Length = 0;
                     sb.Append($"select {fieldsSQL} from {tableName}");
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL) || parms.ContainsKey("LastMaxKey"))
-                    {
-                        sb.Append(" where ");
-                        if (parms.ContainsKey("LastMaxKey"))
+                    if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
+                        if (!string.IsNullOrEmpty(table.WhereSQL))
                         {
-                            sb.Append($"{keyField} > @LastMaxKey");
-                            if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                                sb.Append(" and ").Append(table.SourceWhereSQL);
+                            if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                                sb.Append(" where");
+                            sb.Append(" ").Append(table.WhereSQL);
+                            if (parms.ContainsKey("LastMaxKey"))
+                                sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
                         }
                         else
-                            sb.Append(table.SourceWhereSQL);
-                    }
+                            sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
                     sb.Append($" order by {keyField} limit {toRow - fromRow + 1}");
 
                     bool rst = Query(sb.ToString(), parms, out reader);
@@ -846,11 +860,15 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 {
                     string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
                     string keyField = ProcessFieldName(table.KeyFields[0]);
-                    string keyFields = ProcessFieldNames(table.KeyFields);
+                    string keyFields = ProcessFieldNames(table.KeyFields, tableName);
 
                     sb.Append($"select {fieldsSQL} from {tableName} A join (select {keyFields} from {tableName}");
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                        sb.Append(" where ").Append(table.SourceWhereSQL);
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
+                    {
+                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" where");
+                        sb.Append($" {table.WhereSQL}");
+                    }
                     if (!string.IsNullOrEmpty(table.OrderSQL))
                         sb.Append(" order by ").Append(table.OrderSQL);
                     sb.Append($" limit {toRow - fromRow + 1} offset {fromRow - 1}) B on A.{keyField} = B.{keyField}");
@@ -862,11 +880,15 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 }
                 else
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields);
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, tableName);
 
                     sb.Append($"select {fieldsSQL} from {tableName}");
-                    if (!string.IsNullOrEmpty(table.SourceWhereSQL))
-                        sb.Append(" where ").Append(table.SourceWhereSQL);
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
+                    {
+                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" where");
+                        sb.Append($" {table.WhereSQL}");
+                    }
                     if (!string.IsNullOrEmpty(table.OrderSQL))
                         sb.Append(" order by ").Append(table.OrderSQL);
                     sb.Append($" limit {toRow - fromRow + 1} offset {fromRow - 1}");
