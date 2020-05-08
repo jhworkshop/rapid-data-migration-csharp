@@ -82,7 +82,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     BuildScriptWithDataTable(table, data, filter, out script);
                 else
                     BuildScriptWithMergeSQL(table, data, filter, out script);
-                //BuildScriptWithUpdateSQL(table, data, filter, out script);
 
                 return true;
             }
@@ -94,7 +93,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        protected void BuildScriptWithDataTable(Table table, IDataWrapper data, IDataFilter filter,
+        private void BuildScriptWithDataTable(Table table, IDataWrapper data, IDataFilter filter,
             out object script)
         {
             // 创建数据表，字段清单与目标表须一致
@@ -132,7 +131,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             script = new AppendScript() { Data = dt, KeepIdentity = table.KeepIdentity };
         }
 
-        protected void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
             string tmpTable = $"[{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}]";
@@ -214,52 +213,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 MergeSQL2 = mergeSQL2,
                 CleanSQL = $"DROP TABLE {tmpTable}"
             };
-        }
-
-        [Obsolete("此模式执行效率极低，请用 BuildScriptWithMergeSQL() 替代")]
-        protected void BuildScriptWithUpdateSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
-        {
-            UpdateScript rst = new UpdateScript();
-            StringBuilder sb = new StringBuilder();
-            string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
-
-            data.MapFields(fields);
-            sb.Append($"UPDATE {ProcessTableName(table.DestName)} SET {ProcessFieldName(fields[0])}")
-                .Append($" = {GetFmtValue(filter.GetValue(data, 0, fields[0]))}");
-            for (int i = 1; i < fields.Length; i++)
-                sb.Append($", {ProcessFieldName(fields[i])} = {GetFmtValue(filter.GetValue(data, i, fields[i]))}");
-
-            data.MapFields(table.KeyFields);
-            sb.Append($" WHERE {ProcessFieldName(table.KeyFields[0])} = ")
-                .Append(GetFmtValue(filter.GetValue(data, 0, table.KeyFields[0])));
-            for (int i = 1; i < table.KeyFields.Length; i++)
-                sb.Append($" AND {ProcessFieldName(table.KeyFields[i])} = ")
-                    .Append(GetFmtValue(filter.GetValue(data, i, table.KeyFields[i])));
-
-            rst.UpdateSQL = sb.ToString();
-
-            fields = ExcludeFields(table.DestFields, table.SkipFields);
-            data.MapFields(fields);
-            sb.Length = 0;
-            sb.Append($"INSERT INTO {ProcessTableName(table.DestName)} ({ProcessFieldNames(fields)}) VALUES (")
-                .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
-            for (int i = 1; i < fields.Length; i++)
-                sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
-            sb.Append(")");
-
-            rst.InsertSQL = sb.ToString();
-
-            script = rst;
-        }
-
-        private string BytesToStr(byte[] bytes)
-        {
-            StringBuilder sb = new StringBuilder("0x");
-
-            foreach (byte b in bytes)
-                sb.Append(b.ToString("X2"));
-
-            return sb.ToString();
         }
 
         public void Close()
@@ -500,22 +453,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        private string GetFmtValue(object obj)
-        {
-            if (obj is DBNull)
-                return "NULL";
-            else if (obj is string)
-                return ProcessString(obj as string);
-            else if (obj is DateTime)
-                return ProcessString(((DateTime)obj).ToString("yyyy-MM-dd HH:mm:ss.fff"));
-            else if (obj is bool)
-                return (bool)obj ? "1" : "0";
-            else if (obj is byte[])
-                return BytesToStr(obj as byte[]);
-            else
-                return obj.ToString();
-        }
-
         public string GetLastError()
         {
             return errMsg;
@@ -710,19 +647,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        private string ProcessString(string s)
-        {
-            if (string.IsNullOrEmpty(s))
-                return "''";
-            else
-            {
-                if (s.IndexOf('\'') >= 0)
-                    s = s.Replace("'", "''");
-
-                return $"'{s}'";
-            }
-        }
-
         private string ProcessTableName(string tableName, WithEnums with = WithEnums.None, string alias = "")
         {
             if (string.IsNullOrEmpty(tableName))
@@ -852,17 +776,16 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // 查询最大键值
                 sb.Append($"SELECT MAX({keyField}) AS '_MaxKey_' FROM (")
                     .Append($"SELECT TOP {toRow - fromRow + 1} {keyFieldWithPrefix} FROM {tableName}");
-                if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
-                    if (!string.IsNullOrEmpty(table.WhereSQL))
-                    {
-                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
-                            sb.Append(" WHERE");
-                        sb.Append(" ").Append(table.WhereSQL);
-                        if (parms.ContainsKey("LastMaxKey"))
-                            sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
-                    }
-                    else
-                        sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
+                if (!string.IsNullOrEmpty(table.WhereSQL))
+                {
+                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" WHERE");
+                    sb.Append(" ").Append(table.WhereSQL);
+                    if (parms.ContainsKey("LastMaxKey"))
+                        sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
+                }
+                else if (parms.ContainsKey("LastMaxKey"))
+                    sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
                 sb.Append($" ORDER BY {keyFieldWithPrefix} ASC) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
@@ -871,17 +794,16 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                     sb.Length = 0;
                     sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableName}");
-                    if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
-                        if (!string.IsNullOrEmpty(table.WhereSQL))
-                        {
-                            if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
-                                sb.Append(" WHERE");
-                            sb.Append(" ").Append(table.WhereSQL);
-                            if (parms.ContainsKey("LastMaxKey"))
-                                sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
-                        }
-                        else
-                            sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
+                    {
+                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" WHERE");
+                        sb.Append(" ").Append(table.WhereSQL);
+                        if (parms.ContainsKey("LastMaxKey"))
+                            sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
+                    }
+                    else if (parms.ContainsKey("LastMaxKey"))
+                        sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
                     sb.Append($" ORDER BY {keyFieldWithPrefix} ASC");
 
                     bool rst = Query(sb.ToString(), parms, out reader);

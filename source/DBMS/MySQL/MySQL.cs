@@ -152,7 +152,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     if (isSupportCSV)
                         BuildScriptWithCSV(table, data, filter, out script);
                     else
-                        BuildScriptWithReplaceSQL(table, data, filter, out script);
+                        BuildScriptWithReplaceSQL(table, table.DestName, data, filter, out script);
                 else
                     BuildScriptWithMergeSQL(table, data, filter, out script);
 
@@ -166,7 +166,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
         }
 
-        protected void BuildScriptWithCSV(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        private void BuildScriptWithCSV(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string file = Path.GetTempFileName();
             FileStreamWriter fc = new FileStreamWriter(file, new UTF8Encoding(false));
@@ -201,27 +201,27 @@ namespace JHWork.DataMigration.DBMS.MySQL
             script = new CSVScript() { CSVFile = file, Fields = fields, Count = r };
         }
 
-        protected void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"`{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}`";
+            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(table.KeyFields[0]);
 
-            sb.Append("UPDATE ").Append(destTable).Append(" A JOIN ").Append(tmpTable).Append(" B ON ")
-                .Append("A.").Append(field).Append(" = ").Append("B.").Append(field);
+            sb.Append($"UPDATE {destTable} A JOIN {processedTmpTable} B ON A.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append(" AND A.").Append(field).Append(" = ").Append("B.").Append(field);
+                sb.Append($" AND A.{field} = B.{field}");
             }
             field = ProcessFieldName(fields[0]);
-            sb.Append(" SET A.").Append(field).Append(" = B.").Append(field);
+            sb.Append($" SET A.{field} = B.{field}");
             for (int i = 1; i < fields.Length; i++)
             {
                 field = ProcessFieldName(fields[i]);
-                sb.Append(", A.").Append(field).Append(" = B.").Append(field);
+                sb.Append($", A.{field} = B.{field}");
             }
 
             string updateSQL = sb.ToString();
@@ -229,42 +229,41 @@ namespace JHWork.DataMigration.DBMS.MySQL
             fields = ExcludeFields(table.DestFields, table.SkipFields);
             sb.Length = 0;
             field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append("REPLACE INTO ").Append(destTable).Append(" (").Append(ProcessFieldNames(fields))
-                .Append(") SELECT ").Append(ProcessFieldNames(fields, "A")).Append(" FROM ").Append(tmpTable)
-                .Append(" A LEFT JOIN ").Append(destTable).Append(" B ON A.").Append(field).Append(" = B.")
-                .Append(field);
+            sb.Append($"INSERT INTO {destTable} ({ProcessFieldNames(fields)}) SELECT {ProcessFieldNames(fields, "A")}")
+                .Append($" FROM {processedTmpTable} A LEFT JOIN {destTable} B ON A.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append(" AND A.").Append(field).Append(" = B.").Append(field);
+                sb.Append($" AND A.{field} = B.{field}");
             }
-            sb.Append(" WHERE B.").Append(field).Append(" IS NULL");
+            sb.Append($" WHERE B.{field} IS NULL");
 
             if (isSupportCSV)
                 BuildScriptWithCSV(table, data, filter, out script);
             else
-                BuildScriptWithReplaceSQL(table, data, filter, out script);
+                BuildScriptWithReplaceSQL(table, tmpTable, data, filter, out script);
 
             script = new MergeScript()
             {
-                TableName = tmpTable.Substring(1, tmpTable.Length - 2),
-                PrepareSQL = $"CREATE TABLE {tmpTable} LIKE {destTable}",
+                TableName = tmpTable,
+                PrepareSQL = $"CREATE TABLE {processedTmpTable} LIKE {destTable}",
                 Data = script,
                 UpdateSQL = updateSQL,
                 InsertSQL = sb.ToString(),
-                CleanSQL = $"DROP TABLE {tmpTable}"
+                CleanSQL = $"DROP TABLE {processedTmpTable}"
             };
         }
 
-        protected void BuildScriptWithReplaceSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        private void BuildScriptWithReplaceSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
+            out object script)
         {
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
 
             data.MapFields(fields);
 
-            sb.Append("REPLACE INTO ").Append(ProcessTableName(table.DestName)).Append(" (")
-                .Append(ProcessFieldNames(fields)).Append(")").AppendLine().Append("VALUES").AppendLine()
+            sb.Append($"REPLACE INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+                .AppendLine().Append("VALUES").AppendLine()
                 .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)
                 sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
@@ -285,7 +284,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
         private string BytesToStr(byte[] bytes)
         {
-            StringBuilder sb = new StringBuilder("0x");
+            if (bytes == null) return "NULL";
+
+            StringBuilder sb = new StringBuilder("0x", bytes.Length * 2 + 4); // 冗余两个字符，确保不触发内存扩展
 
             foreach (byte b in bytes)
                 sb.Append(b.ToString("X2"));
@@ -677,8 +678,10 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 if (Execute(ms.PrepareSQL, null, out _))
                     try
                     {
-                        return InternalExecScript(ms.TableName, ms.Data, out count)
-                            && Execute(ms.UpdateSQL, null, out _) && Execute(ms.InsertSQL, null, out _);
+                        if (InternalExecScript(ms.TableName, ms.Data, out count))
+                            if (Execute(ms.UpdateSQL, null, out _))
+                                if (Execute(ms.InsertSQL, null, out _))
+                                    return true;
                     }
                     finally
                     {
@@ -864,17 +867,16 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
                 // 查询最大键值
                 sb.Append($"SELECT MAX({keyField}) AS '_MaxKey_' FROM (SELECT {keyFieldWithPrefix} FROM {tableName}");
-                if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
-                    if (!string.IsNullOrEmpty(table.WhereSQL))
-                    {
-                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
-                            sb.Append(" WHERE");
-                        sb.Append(" ").Append(table.WhereSQL);
-                        if (parms.ContainsKey("LastMaxKey"))
-                            sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
-                    }
-                    else
-                        sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
+                if (!string.IsNullOrEmpty(table.WhereSQL))
+                {
+                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" WHERE");
+                    sb.Append(" ").Append(table.WhereSQL);
+                    if (parms.ContainsKey("LastMaxKey"))
+                        sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
+                }
+                else if (parms.ContainsKey("LastMaxKey"))
+                    sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
                 sb.Append($" ORDER BY {keyFieldWithPrefix} LIMIT {toRow - fromRow + 1}) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
@@ -883,17 +885,16 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
                     sb.Length = 0;
                     sb.Append($"SELECT {fieldsSQL} FROM {tableName}");
-                    if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
-                        if (!string.IsNullOrEmpty(table.WhereSQL))
-                        {
-                            if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
-                                sb.Append(" WHERE");
-                            sb.Append(" ").Append(table.WhereSQL);
-                            if (parms.ContainsKey("LastMaxKey"))
-                                sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
-                        }
-                        else
-                            sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
+                    {
+                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" WHERE");
+                        sb.Append(" ").Append(table.WhereSQL);
+                        if (parms.ContainsKey("LastMaxKey"))
+                            sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
+                    }
+                    else if (parms.ContainsKey("LastMaxKey"))
+                        sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey");
                     sb.Append($" ORDER BY {keyFieldWithPrefix} LIMIT {toRow - fromRow + 1}");
 
                     bool rst = Query(sb.ToString(), parms, out reader);

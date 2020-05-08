@@ -73,10 +73,8 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             {
                 if (table.WriteMode == WriteModes.Append)
                     BuildScriptWithDataTable(table, data, filter, out script);
-                //BuildScriptWithInsertSQL(table, data, filter, out script);
                 else
                     BuildScriptWithMergeSQL(table, data, filter, out script);
-                //BuildScriptWithUpdateSQL(table, data, filter, out script);
 
                 return true;
             }
@@ -88,7 +86,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        protected void BuildScriptWithDataTable(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        private void BuildScriptWithDataTable(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             // 创建数据表，字段清单与目标表须一致
             DataTable dt = new DataTable();
@@ -125,56 +123,27 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             script = dt;
         }
 
-        [Obsolete("此模式执行效率较低，请用 BuildScriptWithDataTable() 替代")]
-        protected void BuildScriptWithInsertSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
-        {
-            StringBuilder sb = new StringBuilder();
-            string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
-
-            data.MapFields(fields);
-
-            sb.Append("insert into ").Append(ProcessTableName(table.DestName)).Append(" (")
-                .Append(ProcessFieldNames(fields)).Append(")").AppendLine().Append("values").AppendLine()
-                .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
-            for (int i = 1; i < fields.Length; i++)
-                sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
-            sb.Append(")");
-
-            int r = 1;
-            while (r < table.PageSize && data.Read())
-            {
-                r++;
-                sb.Append(",").AppendLine().Append("(")
-                    .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
-                for (int i = 1; i < fields.Length; i++)
-                    sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
-                sb.Append(")");
-            }
-
-            script = sb.ToString();
-        }
-
-        protected void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"\"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}\"";
+            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(fields[0]);
 
-            sb.Append("update ").Append(destTable).Append(" A set ").Append(field).Append(" = B.").Append(field);
+            sb.Append($"update {destTable} A set {field} = B.{field}");
             for (int i = 1; i < fields.Length; i++)
             {
                 field = ProcessFieldName(fields[i]);
-                sb.Append(", ").Append(field).Append(" = B.").Append(field);
+                sb.Append($", {field} = B.{field}");
             }
             field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append(" from ").Append(tmpTable).Append(" B where ")
-                .Append("A.").Append(field).Append(" = ").Append("B.").Append(field);
+            sb.Append($" from {processedTmpTable} B where A.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append(" and A.").Append(field).Append(" = ").Append("B.").Append(field);
+                sb.Append($" and A.{field} = B.{field}");
             }
 
             string updateSQL = sb.ToString();
@@ -182,78 +151,26 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             fields = ExcludeFields(table.DestFields, table.SkipFields);
             sb.Length = 0;
             field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append("insert into ").Append(destTable).Append(" (").Append(ProcessFieldNames(fields))
-                .Append(") select ").Append(ProcessFieldNames(fields, "A")).Append(" from ").Append(tmpTable)
-                .Append(" A left join ").Append(destTable).Append(" B on A.").Append(field).Append(" = B.")
-                .Append(field);
+            sb.Append($"insert into {destTable} ({ProcessFieldNames(fields)}) select {ProcessFieldNames(fields, "A")}")
+                .Append($" from {processedTmpTable} A left join {destTable} B on A.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append(" and A.").Append(field).Append(" = B.").Append(field);
+                sb.Append($" and A.{field} = B.{field}");
             }
-            sb.Append(" where B.").Append(field).Append(" is null");
+            sb.Append($" where B.{field} is null");
 
             BuildScriptWithDataTable(table, data, filter, out script);
 
             script = new MergeScript()
             {
-                TableName = tmpTable.Substring(1, tmpTable.Length - 2),
-                PrepareSQL = $"select * into {tmpTable} from {destTable} where 1 = 0",
+                TableName = tmpTable,
+                PrepareSQL = $"select * into {processedTmpTable} from {destTable} where 1 = 0",
                 Data = (DataTable)script,
                 UpdateSQL = updateSQL,
                 InsertSQL = sb.ToString(),
-                CleanSQL = $"drop table {tmpTable}"
+                CleanSQL = $"drop table {processedTmpTable}"
             };
-        }
-
-        [Obsolete("此模式执行效率较低，请用 BuildScriptWithMergeSQL() 替代")]
-        protected void BuildScriptWithUpdateSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
-        {
-            UpdateScript rst = new UpdateScript();
-            StringBuilder sb = new StringBuilder();
-            string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
-
-            data.MapFields(fields);
-            sb.Append("update ").Append(ProcessTableName(table.DestName)).Append(" set ")
-                .Append(ProcessFieldName(fields[0])).Append(" = ")
-                .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
-            for (int i = 1; i < fields.Length; i++)
-                sb.Append(", ").Append(ProcessFieldName(fields[i])).Append(" = ")
-                    .Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
-
-            data.MapFields(table.KeyFields);
-            sb.Append(" where ")
-                .Append(ProcessFieldName(table.KeyFields[0])).Append(" = ")
-                .Append(GetFmtValue(filter.GetValue(data, 0, table.KeyFields[0])));
-            for (int i = 1; i < table.KeyFields.Length; i++)
-                sb.Append(" and ").Append(ProcessFieldName(table.KeyFields[i])).Append(" = ")
-                    .Append(GetFmtValue(filter.GetValue(data, i, table.KeyFields[i])));
-
-            rst.UpdateSQL = sb.ToString();
-
-            fields = ExcludeFields(table.DestFields, table.SkipFields);
-            data.MapFields(fields);
-            sb.Length = 0;
-            sb.Append("insert into ").Append(ProcessTableName(table.DestName)).Append(" (")
-                .Append(ProcessFieldNames(fields)).Append(") values (")
-                .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
-            for (int i = 1; i < fields.Length; i++)
-                sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
-            sb.Append(")");
-
-            rst.InsertSQL = sb.ToString();
-
-            script = rst;
-        }
-
-        private string BytesToStr(byte[] bytes)
-        {
-            StringBuilder sb = new StringBuilder("E'\\\\x");
-
-            foreach (byte b in bytes)
-                sb.Append(b.ToString("X2"));
-
-            return sb.Append('\'').ToString();
         }
 
         public void Close()
@@ -404,22 +321,6 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
                 return false;
             }
-        }
-
-        private string GetFmtValue(object obj)
-        {
-            if (obj is DBNull)
-                return "null";
-            else if (obj is string)
-                return ProcessString(obj as string);
-            else if (obj is DateTime)
-                return ProcessString(((DateTime)obj).ToString("yyyy-MM-dd HH:mm:ss.fff"));
-            else if (obj is bool)
-                return ((bool)obj ? "1" : "0") + "::bit";
-            else if (obj is byte[])
-                return BytesToStr(obj as byte[]);
-            else
-                return obj.ToString();
         }
 
         public string GetLastError()
@@ -598,8 +499,10 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     if (Execute(ms.PrepareSQL, null, out _))
                         try
                         {
-                            return InternalExecScript(ms.TableName, ms.Data, out count)
-                                && Execute(ms.UpdateSQL, null, out _) && Execute(ms.InsertSQL, null, out _);
+                            if (InternalExecScript(ms.TableName, ms.Data, out count))
+                                if (Execute(ms.UpdateSQL, null, out _))
+                                    if (Execute(ms.InsertSQL, null, out _))
+                                        return true;
                         }
                         finally
                         {
@@ -677,19 +580,6 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     sb.Append(", ").Append(prefix).Append(ProcessFieldName(fields[i]));
 
                 return sb.ToString();
-            }
-        }
-
-        private string ProcessString(string s)
-        {
-            if (string.IsNullOrEmpty(s))
-                return "''";
-            else
-            {
-                if (s.IndexOf('\'') >= 0)
-                    s = s.Replace("'", "''");
-
-                return $"'{s}'";
             }
         }
 
@@ -809,17 +699,16 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
                 // 查询最大键值
                 sb.Append($"select max({keyField}) as \"_MaxKey_\" from (select {keyFieldWithPrefix} from {tableName}");
-                if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
-                    if (!string.IsNullOrEmpty(table.WhereSQL))
-                    {
-                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
-                            sb.Append(" where");
-                        sb.Append(" ").Append(table.WhereSQL);
-                        if (parms.ContainsKey("LastMaxKey"))
-                            sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
-                    }
-                    else
-                        sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
+                if (!string.IsNullOrEmpty(table.WhereSQL))
+                {
+                    if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" where");
+                    sb.Append(" ").Append(table.WhereSQL);
+                    if (parms.ContainsKey("LastMaxKey"))
+                        sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
+                }
+                else if (parms.ContainsKey("LastMaxKey"))
+                    sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
                 sb.Append($" order by {keyField} limit {toRow - fromRow + 1}) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
@@ -828,17 +717,16 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
                     sb.Length = 0;
                     sb.Append($"select {fieldsSQL} from {tableName}");
-                    if (!string.IsNullOrEmpty(table.WhereSQL) || parms.ContainsKey("LastMaxKey"))
-                        if (!string.IsNullOrEmpty(table.WhereSQL))
-                        {
-                            if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
-                                sb.Append(" where");
-                            sb.Append(" ").Append(table.WhereSQL);
-                            if (parms.ContainsKey("LastMaxKey"))
-                                sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
-                        }
-                        else
-                            sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
+                    if (!string.IsNullOrEmpty(table.WhereSQL))
+                    {
+                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" where");
+                        sb.Append(" ").Append(table.WhereSQL);
+                        if (parms.ContainsKey("LastMaxKey"))
+                            sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
+                    }
+                    else if (parms.ContainsKey("LastMaxKey"))
+                        sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
                     sb.Append($" order by {keyField} limit {toRow - fromRow + 1}");
 
                     bool rst = Query(sb.ToString(), parms, out reader);
