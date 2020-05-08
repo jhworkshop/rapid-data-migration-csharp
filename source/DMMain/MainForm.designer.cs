@@ -233,7 +233,7 @@
             // 
             // openDialog
             // 
-            this.openDialog.Filter = "配置文件(*.json)|*.json|所有文件(*.*)|*.*";
+            this.openDialog.Filter = "配置文件(profile*.json)|profile*.json|所有文件(*.*)|*.*";
             this.openDialog.Title = "加载配置";
             // 
             // timer
