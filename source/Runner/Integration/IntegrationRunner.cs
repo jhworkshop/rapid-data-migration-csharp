@@ -441,9 +441,9 @@ namespace JHWork.DataMigration.Runner.Integration
                     }
                     else if (dependCount == 0)
                         return null;
-
-                    Thread.Sleep(50);
                 }
+
+                Thread.Sleep(50);
             }
         }
 

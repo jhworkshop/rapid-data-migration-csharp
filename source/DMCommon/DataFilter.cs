@@ -47,7 +47,12 @@ namespace JHWork.DataMigration.Common
             IDataFilter dataFilter = loader.GetInstanceByName(name);
 
             if (dataFilter == null)
+            {
+                if (!string.IsNullOrEmpty(name))
+                    Logger.WriteLog("系统", $"指定过滤器 {name} 不存在，使用默认过滤器！");
+
                 return filter;
+            }
             else
                 return dataFilter;
         }

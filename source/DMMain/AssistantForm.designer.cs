@@ -36,6 +36,8 @@
             this.label15 = new System.Windows.Forms.Label();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.destEncrypt = new System.Windows.Forms.CheckBox();
+            this.destCompress = new System.Windows.Forms.CheckBox();
             this.destCharSet = new System.Windows.Forms.ComboBox();
             this.destPwd = new System.Windows.Forms.TextBox();
             this.destUser = new System.Windows.Forms.TextBox();
@@ -51,6 +53,8 @@
             this.label13 = new System.Windows.Forms.Label();
             this.label14 = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.sourceEncrypt = new System.Windows.Forms.CheckBox();
+            this.sourceCompress = new System.Windows.Forms.CheckBox();
             this.sourceCharSet = new System.Windows.Forms.ComboBox();
             this.sourcePwd = new System.Windows.Forms.TextBox();
             this.sourceUser = new System.Windows.Forms.TextBox();
@@ -80,10 +84,6 @@
             this.saveDialog = new System.Windows.Forms.SaveFileDialog();
             this.progressLabel = new System.Windows.Forms.Label();
             this.progressBar = new System.Windows.Forms.ProgressBar();
-            this.sourceCompress = new System.Windows.Forms.CheckBox();
-            this.sourceEncrypt = new System.Windows.Forms.CheckBox();
-            this.destEncrypt = new System.Windows.Forms.CheckBox();
-            this.destCompress = new System.Windows.Forms.CheckBox();
             this.tabControl1.SuspendLayout();
             this.tabPage3.SuspendLayout();
             this.tabPage1.SuspendLayout();
@@ -167,10 +167,30 @@
             this.groupBox2.Controls.Add(this.label14);
             this.groupBox2.Location = new System.Drawing.Point(332, 16);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(300, 288);
+            this.groupBox2.Size = new System.Drawing.Size(300, 289);
             this.groupBox2.TabIndex = 1;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = " 目标 ";
+            // 
+            // destEncrypt
+            // 
+            this.destEncrypt.AutoSize = true;
+            this.destEncrypt.Location = new System.Drawing.Point(149, 256);
+            this.destEncrypt.Name = "destEncrypt";
+            this.destEncrypt.Size = new System.Drawing.Size(75, 21);
+            this.destEncrypt.TabIndex = 17;
+            this.destEncrypt.Text = "加密传输";
+            this.destEncrypt.UseVisualStyleBackColor = true;
+            // 
+            // destCompress
+            // 
+            this.destCompress.AutoSize = true;
+            this.destCompress.Location = new System.Drawing.Point(19, 256);
+            this.destCompress.Name = "destCompress";
+            this.destCompress.Size = new System.Drawing.Size(75, 21);
+            this.destCompress.TabIndex = 16;
+            this.destCompress.Text = "压缩传输";
+            this.destCompress.UseVisualStyleBackColor = true;
             // 
             // destCharSet
             // 
@@ -311,6 +331,26 @@
             this.groupBox1.TabIndex = 0;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = " 源 ";
+            // 
+            // sourceEncrypt
+            // 
+            this.sourceEncrypt.AutoSize = true;
+            this.sourceEncrypt.Location = new System.Drawing.Point(149, 256);
+            this.sourceEncrypt.Name = "sourceEncrypt";
+            this.sourceEncrypt.Size = new System.Drawing.Size(75, 21);
+            this.sourceEncrypt.TabIndex = 15;
+            this.sourceEncrypt.Text = "加密传输";
+            this.sourceEncrypt.UseVisualStyleBackColor = true;
+            // 
+            // sourceCompress
+            // 
+            this.sourceCompress.AutoSize = true;
+            this.sourceCompress.Location = new System.Drawing.Point(19, 256);
+            this.sourceCompress.Name = "sourceCompress";
+            this.sourceCompress.Size = new System.Drawing.Size(75, 21);
+            this.sourceCompress.TabIndex = 14;
+            this.sourceCompress.Text = "压缩传输";
+            this.sourceCompress.UseVisualStyleBackColor = true;
             // 
             // sourceCharSet
             // 
@@ -549,7 +589,7 @@
             // progressLabel
             // 
             this.progressLabel.AutoSize = true;
-            this.progressLabel.Location = new System.Drawing.Point(25, 384);
+            this.progressLabel.Location = new System.Drawing.Point(8, 384);
             this.progressLabel.Name = "progressLabel";
             this.progressLabel.Size = new System.Drawing.Size(125, 17);
             this.progressLabel.TabIndex = 3;
@@ -564,46 +604,6 @@
             this.progressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
             this.progressBar.TabIndex = 4;
             this.progressBar.Visible = false;
-            // 
-            // sourceCompress
-            // 
-            this.sourceCompress.AutoSize = true;
-            this.sourceCompress.Location = new System.Drawing.Point(19, 256);
-            this.sourceCompress.Name = "sourceCompress";
-            this.sourceCompress.Size = new System.Drawing.Size(75, 21);
-            this.sourceCompress.TabIndex = 14;
-            this.sourceCompress.Text = "压缩传输";
-            this.sourceCompress.UseVisualStyleBackColor = true;
-            // 
-            // sourceEncrypt
-            // 
-            this.sourceEncrypt.AutoSize = true;
-            this.sourceEncrypt.Location = new System.Drawing.Point(149, 256);
-            this.sourceEncrypt.Name = "sourceEncrypt";
-            this.sourceEncrypt.Size = new System.Drawing.Size(75, 21);
-            this.sourceEncrypt.TabIndex = 15;
-            this.sourceEncrypt.Text = "加密传输";
-            this.sourceEncrypt.UseVisualStyleBackColor = true;
-            // 
-            // destEncrypt
-            // 
-            this.destEncrypt.AutoSize = true;
-            this.destEncrypt.Location = new System.Drawing.Point(149, 256);
-            this.destEncrypt.Name = "destEncrypt";
-            this.destEncrypt.Size = new System.Drawing.Size(75, 21);
-            this.destEncrypt.TabIndex = 17;
-            this.destEncrypt.Text = "加密传输";
-            this.destEncrypt.UseVisualStyleBackColor = true;
-            // 
-            // destCompress
-            // 
-            this.destCompress.AutoSize = true;
-            this.destCompress.Location = new System.Drawing.Point(19, 256);
-            this.destCompress.Name = "destCompress";
-            this.destCompress.Size = new System.Drawing.Size(75, 21);
-            this.destCompress.TabIndex = 16;
-            this.destCompress.Text = "压缩传输";
-            this.destCompress.UseVisualStyleBackColor = true;
             // 
             // AssistantForm
             // 
