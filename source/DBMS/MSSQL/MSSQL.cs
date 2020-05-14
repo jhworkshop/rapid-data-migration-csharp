@@ -705,7 +705,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
-                if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                     sb.Append(" WHERE");
                 sb.Append($" {table.WhereSQL}");
             }
@@ -778,7 +778,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     .Append($"SELECT TOP {toRow - fromRow + 1} {keyFieldWithPrefix} FROM {tableName}");
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
-                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                    if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                         sb.Append(" WHERE");
                     sb.Append(" ").Append(table.WhereSQL);
                     if (parms.ContainsKey("LastMaxKey"))
@@ -796,7 +796,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append(" ").Append(table.WhereSQL);
                         if (parms.ContainsKey("LastMaxKey"))
@@ -850,7 +850,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("WEHRE", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" WEHRE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append($" {table.WhereSQL}");
                     }
@@ -873,7 +873,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append($" {table.WhereSQL}");
                     }
@@ -903,7 +903,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
-                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                    if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                         sb.Append(" WHERE");
                     sb.Append($" {table.WhereSQL}");
                 }
@@ -916,7 +916,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 }
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
-                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                    if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                         sb.Append(" WHERE");
                     sb.Append($" {table.WhereSQL} AND B.{keyField} IS NULL");
                 }

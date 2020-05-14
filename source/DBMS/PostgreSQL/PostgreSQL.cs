@@ -620,7 +620,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
-                if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
                     sb.Append(" where");
                 sb.Append($" {table.WhereSQL}");
             }
@@ -701,7 +701,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 sb.Append($"select max({keyField}) as \"_MaxKey_\" from (select {keyFieldWithPrefix} from {tableName}");
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
-                    if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                    if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
                         sb.Append(" where");
                     sb.Append(" ").Append(table.WhereSQL);
                     if (parms.ContainsKey("LastMaxKey"))
@@ -719,7 +719,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     sb.Append($"select {fieldsSQL} from {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" where");
                         sb.Append(" ").Append(table.WhereSQL);
                         if (parms.ContainsKey("LastMaxKey"))
@@ -753,7 +753,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     sb.Append($"select {fieldsSQL} from {tableName} A join (select {keyFields} from {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" where");
                         sb.Append($" {table.WhereSQL}");
                     }
@@ -773,7 +773,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     sb.Append($"select {fieldsSQL} from {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("where", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" where");
                         sb.Append($" {table.WhereSQL}");
                     }

@@ -262,7 +262,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             data.MapFields(fields);
 
-            sb.Append($"REPLACE INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+            sb.Append($"INSERT INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
                 .AppendLine().Append("VALUES").AppendLine()
                 .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)
@@ -789,7 +789,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
-                if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                     sb.Append(" WHERE");
                 sb.Append($" {table.WhereSQL}");
             }
@@ -869,7 +869,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 sb.Append($"SELECT MAX({keyField}) AS '_MaxKey_' FROM (SELECT {keyFieldWithPrefix} FROM {tableName}");
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
-                    if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                    if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                         sb.Append(" WHERE");
                     sb.Append(" ").Append(table.WhereSQL);
                     if (parms.ContainsKey("LastMaxKey"))
@@ -887,7 +887,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     sb.Append($"SELECT {fieldsSQL} FROM {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append(" ").Append(table.WhereSQL);
                         if (parms.ContainsKey("LastMaxKey"))
@@ -921,7 +921,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     sb.Append($"SELECT {fieldsSQL} FROM {tableName} A JOIN (SELECT {keyFields} FROM {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append($" {table.WhereSQL}");
                     }
@@ -941,7 +941,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     sb.Append($"SELECT {fieldsSQL} FROM {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf("WHERE", StringComparison.OrdinalIgnoreCase) < 0)
+                        if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append($" {table.WhereSQL}");
                     }
