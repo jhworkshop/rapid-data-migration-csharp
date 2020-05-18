@@ -26,16 +26,16 @@ namespace JHWork.DataMigration.Runner.Migration
     {
         private IStopStatus status;
 
-        private void AnalyseDatabase(JObject obj, Database db)
+        private void AnalyseDatabase(JObject obj, JObject inherited, Database db, string prefix)
         {
-            db.DBMS = obj["dbms"].ToString();
-            db.Server = obj["server"].ToString();
-            db.Port = uint.Parse(obj["port"].ToString());
-            db.User = obj["user"].ToString();
-            db.Pwd = obj.ContainsKey("password") ? obj["password"].ToString() : "";
-            db.CharSet = obj.ContainsKey("charset") ? obj["charset"].ToString() : "utf8";
-            db.Encrypt = obj.ContainsKey("encrypt") ? int.Parse(obj["encrypt"].ToString()) != 0 : false;
-            db.Compress = obj.ContainsKey("compress") ? int.Parse(obj["compress"].ToString()) != 0 : false;
+            db.DBMS = GetJValue(obj, inherited, "dbms", prefix);
+            db.Server = GetJValue(obj, inherited, "server", prefix);
+            db.Port = uint.Parse(GetJValue(obj, inherited, "port", prefix));
+            db.User = GetJValue(obj, inherited, "user", prefix);
+            db.Pwd = GetJValue(obj, inherited, "password", prefix);
+            db.CharSet = GetJValue(obj, inherited, "charset", prefix, "utf8");
+            db.Encrypt = int.Parse(GetJValue(obj, inherited, "encrypt", prefix, "0")) != 0;
+            db.Compress = int.Parse(GetJValue(obj, inherited, "compress", prefix, "0")) != 0;
         }
 
         private void AnalyseDatabase(string db, MigrationTask task)
@@ -46,7 +46,7 @@ namespace JHWork.DataMigration.Runner.Migration
             task.Dest.DB = s.Length > 1 ? s[1] : s[0];
         }
 
-        public Instance[] AnalyseInstance(JArray objs, string path)
+        public Instance[] AnalyseInstance(JArray objs, JObject inherited, string path)
         {
             List<Instance> instances = new List<Instance>();
 
@@ -61,7 +61,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 {
                     MigrationTask task = new MigrationTask();
 
-                    AnalyseTask(obj, dbs[j].ToString(), task, path);
+                    AnalyseTask(obj, inherited, dbs[j].ToString(), task, path);
                     tasks.Add(task);
                 }
 
@@ -151,10 +151,10 @@ namespace JHWork.DataMigration.Runner.Migration
                 task.Tables = new MigrationTable[][] { };
         }
 
-        private void AnalyseTask(JObject obj, string db, MigrationTask task, string path)
+        private void AnalyseTask(JObject obj, JObject inherited, string db, MigrationTask task, string path)
         {
-            task.ReadPages = uint.Parse(obj["readPages"].ToString());
-            task.Threads = uint.Parse(obj["threads"].ToString());
+            task.ReadPages = uint.Parse(GetJValue(obj, inherited, "readPages"));
+            task.Threads = uint.Parse(GetJValue(obj, inherited, "threads"));
             task.Progress = 0;
             task.Total = 0;
             task.Status = DataStates.Idle;
@@ -165,10 +165,10 @@ namespace JHWork.DataMigration.Runner.Migration
             if (!(task.Threads > 0))
                 throw new Exception("并发迁移表数必须大于零(threads)。");
 
-            AnalyseDatabase(obj["source"] as JObject, task.Source);
-            AnalyseDatabase(obj["dest"] as JObject, task.Dest);
+            AnalyseDatabase(obj["source"] as JObject, inherited, task.Source, "source");
+            AnalyseDatabase(obj["dest"] as JObject, inherited, task.Dest, "dest");
             AnalyseDatabase(db, task);
-            AnalyseTable($"{path}\\{obj["tables"]}", task);
+            AnalyseTable($"{path}\\{GetJValue(obj, inherited, "tables")}", task);
 
             task.Name = $"{task.Source.DB} -> {task.Dest.DB}";
         }
@@ -343,6 +343,19 @@ namespace JHWork.DataMigration.Runner.Migration
                     task.StartTick = WinAPI.GetTickCount() - task.StartTick;
                 }
             }
+        }
+
+        private string GetJValue(JObject obj, JObject inherited, string key, string prefix = "", string defValue = "")
+        {
+            if (obj.ContainsKey(key))
+                return obj[key].ToString();
+            else if (inherited != null)
+            {
+                if (!string.IsNullOrEmpty(prefix)) key = $"{prefix}.{key}";
+                if (inherited.ContainsKey(key)) return inherited[key].ToString();
+            }
+
+            return defValue;
         }
 
         public string GetName()

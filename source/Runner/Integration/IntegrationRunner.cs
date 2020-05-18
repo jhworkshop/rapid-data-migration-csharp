@@ -26,23 +26,23 @@ namespace JHWork.DataMigration.Runner.Integration
     {
         private IStopStatus status;
 
-        private Database AnalyseDatabase(JObject obj)
+        private Database AnalyseDatabase(JObject obj, JObject inherited)
         {
             return new Database()
             {
-                DBMS = obj["dbms"].ToString(),
-                Server = obj["server"].ToString(),
-                Port = uint.Parse(obj["port"].ToString()),
-                DB = obj["db"].ToString(),
-                User = obj["user"].ToString(),
-                Pwd = obj.ContainsKey("password") ? obj["password"].ToString() : "",
-                CharSet = obj.ContainsKey("charset") ? obj["charset"].ToString() : "utf8",
-                Encrypt = obj.ContainsKey("encrypt") ? int.Parse(obj["encrypt"].ToString()) != 0 : false,
-                Compress = obj.ContainsKey("compress") ? int.Parse(obj["compress"].ToString()) != 0 : false
+                DBMS = GetJValue(obj, inherited, "dbms", "dest"),
+                Server = GetJValue(obj, inherited, "server", "dest"),
+                Port = uint.Parse(GetJValue(obj, inherited, "port", "dest")),
+                DB = GetJValue(obj, inherited, "db", "dest"),
+                User = GetJValue(obj, inherited, "user", "dest"),
+                Pwd = GetJValue(obj, inherited, "password", "dest"),
+                CharSet = GetJValue(obj, inherited, "charset", "dest", "utf8"),
+                Encrypt = int.Parse(GetJValue(obj, inherited, "encrypt", "dest", "0")) != 0,
+                Compress = int.Parse(GetJValue(obj, inherited, "compress", "dest", "0")) != 0
             };
         }
 
-        private Database[] AnalyseDatabases(JArray objs)
+        private Database[] AnalyseDatabases(JArray objs, JObject inherited)
         {
             List<Database> lst = new List<Database>();
 
@@ -53,28 +53,29 @@ namespace JHWork.DataMigration.Runner.Integration
                 foreach (JToken db in dbs)
                     lst.Add(new Database()
                     {
-                        DBMS = obj["dbms"].ToString(),
-                        Server = obj["server"].ToString(),
-                        Port = uint.Parse(obj["port"].ToString()),
+                        DBMS = GetJValue(obj, inherited, "dbms", "source"),
+                        Server = GetJValue(obj, inherited, "server", "source"),
+                        Port = uint.Parse(GetJValue(obj, inherited, "port", "source")),
                         DB = db.ToString(),
-                        User = obj["user"].ToString(),
-                        Pwd = obj.ContainsKey("password") ? obj["password"].ToString() : "",
-                        CharSet = obj.ContainsKey("charset") ? obj["charset"].ToString() : "utf8",
-                        Encrypt = obj.ContainsKey("encrypt") ? int.Parse(obj["encrypt"].ToString()) != 0 : false,
-                        Compress = obj.ContainsKey("compress") ? int.Parse(obj["compress"].ToString()) != 0 : false
+                        User = GetJValue(obj, inherited, "user", "source"),
+                        Pwd = GetJValue(obj, inherited, "password", "source"),
+                        CharSet = GetJValue(obj, inherited, "charset", "source", "utf8"),
+                        Encrypt = int.Parse(GetJValue(obj, inherited, "encrypt", "source", "0")) != 0,
+                        Compress = int.Parse(GetJValue(obj, inherited, "compress", "source", "0")) != 0
                     });
             }
 
             return lst.ToArray();
         }
 
-        public Instance[] AnalyseInstance(JArray objs, string path)
+        public Instance[] AnalyseInstance(JArray objs, JObject inherited, string path)
         {
             List<IntegrationInstance> instances = new List<IntegrationInstance>();
 
             foreach (JObject obj in objs)
             {
-                IntegrationTable[][] tables = AnalyseTable($"{path}\\{obj["tables"]}", out string parms);
+                IntegrationTable[][] tables = AnalyseTable($"{path}\\{GetJValue(obj, inherited, "tables")}",
+                    out string parms);
                 IntegrationTask[][] tasks = new IntegrationTask[tables.Length][];
                 List<IntegrationTask> taskList = new List<IntegrationTask>();
 
@@ -92,11 +93,11 @@ namespace JHWork.DataMigration.Runner.Integration
                                 Total = 0,
                                 Status = DataStates.Idle,
                                 StartTick = 0,
-                                Sources = AnalyseDatabases(obj["sources"] as JArray),
-                                Dest = AnalyseDatabase(obj["dest"] as JObject),
+                                Sources = AnalyseDatabases(obj["sources"] as JArray, inherited),
+                                Dest = AnalyseDatabase(obj["dest"] as JObject, inherited),
                                 Params = parms,
                                 Table = tables[i][j],
-                                ReadPages = uint.Parse(obj["readPages"].ToString())
+                                ReadPages = uint.Parse(GetJValue(obj, inherited, "readPages"))
                             };
 
                             taskList.Add(task);
@@ -112,7 +113,7 @@ namespace JHWork.DataMigration.Runner.Integration
                         Name = $"{taskList[0].Dest.Server}/{taskList[0].Dest.DB}",
                         Tasks = taskList.ToArray(),
                         ActualTasks = tasks,
-                        Threads = uint.Parse(obj["threads"].ToString())
+                        Threads = uint.Parse(GetJValue(obj, inherited, "threads"))
                     };
 
                     instances.Add(ins);
@@ -360,6 +361,19 @@ namespace JHWork.DataMigration.Runner.Integration
 
                 Logger.WriteLog(instance.Name, "汇集成功。");
             }
+        }
+
+        private string GetJValue(JObject obj, JObject inherited, string key, string prefix = "", string defValue = "")
+        {
+            if (obj.ContainsKey(key))
+                return obj[key].ToString();
+            else if (inherited != null)
+            {
+                if (!string.IsNullOrEmpty(prefix)) key = $"{prefix}.{key}";
+                if (inherited.ContainsKey(key)) return inherited[key].ToString();
+            }
+
+            return defValue;
         }
 
         public string GetName()

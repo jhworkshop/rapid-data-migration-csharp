@@ -181,9 +181,10 @@ namespace JHWork.DataMigration.Common
         /// 解析实例配置
         /// </summary>
         /// <param name="objs">实例配置</param>
+        /// <param name="inherited">继承项</param>
         /// <param name="path">文件路径</param>
         /// <returns>实例清单</returns>
-        Instance[] AnalyseInstance(JArray objs, string path);
+        Instance[] AnalyseInstance(JArray objs, JObject inherited, string path);
 
         /// <summary>
         /// 重置实例状态

@@ -158,7 +158,7 @@ namespace JHWork.DataMigration
             AnalyseThreads(obj);
 
             // 实例
-            Instances = Analyzer.AnalyseInstance(obj["instances"] as JArray, path);
+            Instances = Analyzer.AnalyseInstance(obj["instances"] as JArray, obj["inherited"] as JObject, path);
         }
 
         private JObject LoadAndDeserialize(string file)
