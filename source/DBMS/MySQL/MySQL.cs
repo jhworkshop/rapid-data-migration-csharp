@@ -120,7 +120,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
     /// </summary>
     public class MySQL : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
-        private readonly MySqlConnection conn = new MySqlConnection();
+        private MySqlConnection conn = null;
         private MySqlTransaction trans = null;
         private string errMsg = "";
         private string title = "MySQL";
@@ -298,7 +298,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
         {
             try
             {
-                conn.Close();
+                conn = null; // 为适应异步回滚，此处只做引用数清零
             }
             catch { }
         }
@@ -334,6 +334,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             try
             {
+                conn = new MySqlConnection();
                 conn.Close();
                 conn.ConnectionString = $"Data Source={db.Server};Port={db.Port};Initial Catalog={db.DB}"
                     + $";User ID={db.User};Password={db.Pwd};CharSet={db.CharSet};Pooling=false"
@@ -984,7 +985,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
         {
             try
             {
-                trans.Rollback();
+                trans.RollbackAsync(); // 异步回滚
 
                 return true;
             }

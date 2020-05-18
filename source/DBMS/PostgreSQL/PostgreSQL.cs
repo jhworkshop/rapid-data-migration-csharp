@@ -43,7 +43,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
     /// </summary>
     public class PostgreSQL : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
-        private readonly NpgsqlConnection conn = new NpgsqlConnection();
+        private NpgsqlConnection conn;
         private NpgsqlTransaction trans = null;
         private string errMsg = "";
         private string title = "PostgreSQL";
@@ -177,7 +177,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         {
             try
             {
-                conn.Close();
+                conn = null; // 为适应异步回滚，此处只做引用数清零
             }
             catch { }
         }
@@ -211,6 +211,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
             try
             {
+                conn = new NpgsqlConnection();
                 conn.Close();
                 conn.ConnectionString = $"Server={db.Server};Port={db.Port};Database={db.DB};Userid={db.User}"
                     + $";Password={db.Pwd};Pooling=false;Persist Security Info=True;SslMode={encrypt}";
@@ -816,7 +817,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         {
             try
             {
-                trans.Rollback();
+                trans.RollbackAsync(); // 异步回滚
 
                 return true;
             }
