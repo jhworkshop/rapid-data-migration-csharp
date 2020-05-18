@@ -114,7 +114,7 @@ namespace JHWork.DataMigration.Common
         /// <param name="content">内容</param>
         public static void WriteLog(string title, string content)
         {
-            StringBuilder sb = new StringBuilder(DateTime.Now.ToString("yy/MM/dd HH:mm:ss.fff"))
+            StringBuilder sb = new StringBuilder(DateTime.Now.ToString("HH:mm:ss.fff"))
                 .Append(" [").Append(title).Append("] - ").Append(content);
 
             lock (lockLog)
