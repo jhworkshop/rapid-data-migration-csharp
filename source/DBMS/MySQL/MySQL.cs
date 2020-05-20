@@ -152,7 +152,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     if (isSupportCSV)
                         BuildScriptWithCSV(table, data, filter, out script);
                     else
-                        BuildScriptWithReplaceSQL(table, table.DestName, data, filter, out script);
+                        BuildScriptWithInsertSQL(table, table.DestName, data, filter, out script);
+                else if (table.UseReplace)
+                    BuildScriptWithReplaceSQL(table, table.DestName, data, filter, out script);
                 else
                     BuildScriptWithMergeSQL(table, data, filter, out script);
 
@@ -241,17 +243,45 @@ namespace JHWork.DataMigration.DBMS.MySQL
             if (isSupportCSV)
                 BuildScriptWithCSV(table, data, filter, out script);
             else
-                BuildScriptWithReplaceSQL(table, tmpTable, data, filter, out script);
+                BuildScriptWithInsertSQL(table, tmpTable, data, filter, out script);
 
             script = new MergeScript()
             {
                 TableName = tmpTable,
-                PrepareSQL = $"CREATE TABLE {processedTmpTable} LIKE {destTable}",
+                PrepareSQL = $"CREATE TEMPORARY TABLE {processedTmpTable} LIKE {destTable}",
                 Data = script,
                 UpdateSQL = updateSQL,
                 InsertSQL = sb.ToString(),
-                CleanSQL = $"DROP TABLE {processedTmpTable}"
+                CleanSQL = $"DROP TEMPORARY TABLE IF EXISTS {processedTmpTable}"
             };
+        }
+
+        private void BuildScriptWithInsertSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
+            out object script)
+        {
+            StringBuilder sb = new StringBuilder();
+            string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
+
+            data.MapFields(fields);
+
+            sb.Append($"INSERT INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+                .AppendLine().Append("VALUES").AppendLine()
+                .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+            for (int i = 1; i < fields.Length; i++)
+                sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
+            sb.Append(")");
+
+            int r = 1;
+            while (r < table.PageSize && data.Read())
+            {
+                r++;
+                sb.Append(",").AppendLine().Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+                for (int i = 1; i < fields.Length; i++)
+                    sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
+                sb.Append(")");
+            }
+
+            script = sb.ToString();
         }
 
         private void BuildScriptWithReplaceSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
@@ -262,7 +292,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             data.MapFields(fields);
 
-            sb.Append($"INSERT INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+            sb.Append($"REPLACE INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
                 .AppendLine().Append("VALUES").AppendLine()
                 .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)

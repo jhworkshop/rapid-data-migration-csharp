@@ -49,7 +49,8 @@ namespace JHWork.DataMigration.Common
         public string[] KeyFields { get; set; }     // 主键字段
         public string[] SkipFields { get; set; }    // 跳过字段
         public string Filter { get; set; }          // 过滤器
-        public bool KeepIdentity { get; set; }      // 保留自增值
+        public bool KeepIdentity { get; set; }      // 保留自增值，MSSQL 专用
+        public bool UseReplace { get; set; }        // 使用 REPLACE 语句更新，MySQL 专用
         public string[] SourceFields { get; set; }  // 源字段
         public string[] DestFields { get; set; }    // 目标字段
         public string[] References { get; set; }    // 外键表
