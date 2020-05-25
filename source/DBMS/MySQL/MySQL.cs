@@ -148,7 +148,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
         {
             if (data.Read())
             {
-                if (table.WriteMode == WriteModes.Append)
+                if (table is MaskingTable)
+                    BuildScriptWithMaskSQL(table, data, filter, out script);
+                else if (table.WriteMode == WriteModes.Append)
                     if (isSupportCSV)
                         BuildScriptWithCSV(table, data, filter, out script);
                     else
@@ -201,6 +203,45 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 fields[i] = ProcessFieldName(fields[i]);
 
             script = new CSVScript() { CSVFile = file, Fields = fields, Count = r };
+        }
+
+        private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        {
+            string destTable = ProcessTableName(table.DestName);
+            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
+            StringBuilder sb = new StringBuilder();
+            string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
+            string field = ProcessFieldName(table.KeyFields[0]);
+
+            sb.Append($"UPDATE {destTable} A JOIN {processedTmpTable} B ON A.{field} = B.{field}");
+            for (int i = 1; i < table.KeyFields.Length; i++)
+            {
+                field = ProcessFieldName(table.KeyFields[i]);
+                sb.Append($" AND A.{field} = B.{field}");
+            }
+            field = ProcessFieldName(fields[0]);
+            sb.Append($" SET A.{field} = B.{field}");
+            for (int i = 1; i < fields.Length; i++)
+            {
+                field = ProcessFieldName(fields[i]);
+                sb.Append($", A.{field} = B.{field}");
+            }
+
+            if (isSupportCSV)
+                BuildScriptWithCSV(table, data, filter, out script);
+            else
+                BuildScriptWithInsertSQL(table, tmpTable, data, filter, out script);
+
+            script = new MergeScript()
+            {
+                TableName = tmpTable,
+                PrepareSQL = $"CREATE TEMPORARY TABLE {processedTmpTable} (SELECT {ProcessFieldNames(table.DestFields)} FROM {destTable} WHERE 1 = 0)",
+                Data = script,
+                UpdateSQL = sb.ToString(),
+                InsertSQL = "",
+                CleanSQL = $"DROP TEMPORARY TABLE IF EXISTS {processedTmpTable}"
+            };
         }
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
@@ -471,10 +512,10 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
                 return $"\"{s}\"";
             }
-            else if (obj is DateTime)
-                return ((DateTime)obj).ToString("yyyy-MM-dd HH:mm:ss.fff");
-            else if (obj is bool)
-                return (bool)obj ? "1" : "0";
+            else if (obj is DateTime dt)
+                return dt.ToString("yyyy-MM-dd HH:mm:ss.fff");
+            else if (obj is bool b)
+                return b ? "1" : "0";
             else if (obj is byte[])
                 return BytesToStr(obj as byte[]);
             else
@@ -508,10 +549,10 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 return "NULL";
             else if (obj is string)
                 return ProcessString(obj as string);
-            else if (obj is DateTime)
-                return ProcessString(((DateTime)obj).ToString("yyyy-MM-dd HH:mm:ss.fff"));
-            else if (obj is bool)
-                return (bool)obj ? "1" : "0";
+            else if (obj is DateTime dt)
+                return ProcessString(dt.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+            else if (obj is bool b)
+                return b ? "1" : "0";
             else if (obj is byte[])
                 return BytesToStr(obj as byte[]);
             else
@@ -672,8 +713,8 @@ namespace JHWork.DataMigration.DBMS.MySQL
         private bool InternalExecScript(string table, object script, out uint count)
         {
             count = 0;
-            if (script is string)
-                return Execute((string)script, null, out count);
+            if (script is string sql)
+                return Execute(sql, null, out count);
             else if (script is CSVScript obj)
             {
                 try
@@ -711,7 +752,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     {
                         if (InternalExecScript(ms.TableName, ms.Data, out count))
                             if (Execute(ms.UpdateSQL, null, out _))
-                                if (Execute(ms.InsertSQL, null, out _))
+                                if (string.IsNullOrEmpty(ms.InsertSQL) || Execute(ms.InsertSQL, null, out _))
                                     return true;
                     }
                     finally

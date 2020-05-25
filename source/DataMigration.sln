@@ -29,6 +29,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Migration", "Runner\Migrati
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Integration", "Runner\Integration\Integration.csproj", "{67ACFBCD-DE93-4FCB-B60D-A29099634EA2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Masking", "Runner\Masking\Masking.csproj", "{AAA9D809-7DC0-4788-A93F-69D700C14A77}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -63,6 +65,10 @@ Global
 		{67ACFBCD-DE93-4FCB-B60D-A29099634EA2}.Debug|x64.Build.0 = Debug|x64
 		{67ACFBCD-DE93-4FCB-B60D-A29099634EA2}.Release|x64.ActiveCfg = Release|x64
 		{67ACFBCD-DE93-4FCB-B60D-A29099634EA2}.Release|x64.Build.0 = Release|x64
+		{AAA9D809-7DC0-4788-A93F-69D700C14A77}.Debug|x64.ActiveCfg = Debug|x64
+		{AAA9D809-7DC0-4788-A93F-69D700C14A77}.Debug|x64.Build.0 = Debug|x64
+		{AAA9D809-7DC0-4788-A93F-69D700C14A77}.Release|x64.ActiveCfg = Release|x64
+		{AAA9D809-7DC0-4788-A93F-69D700C14A77}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -73,6 +79,7 @@ Global
 		{E134D80E-2200-4346-A856-BA54B5AC85A3} = {34ADEAE1-4D26-4064-B7DD-7CEA42418B4E}
 		{F81B0D61-9778-4F99-B6E5-3E12D82E50D0} = {0F9B0F98-CA40-46A6-9734-45406AA490E2}
 		{67ACFBCD-DE93-4FCB-B60D-A29099634EA2} = {0F9B0F98-CA40-46A6-9734-45406AA490E2}
+		{AAA9D809-7DC0-4788-A93F-69D700C14A77} = {0F9B0F98-CA40-46A6-9734-45406AA490E2}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {9C36DA14-FAD9-4905-A64D-6D408B5D9CC0}

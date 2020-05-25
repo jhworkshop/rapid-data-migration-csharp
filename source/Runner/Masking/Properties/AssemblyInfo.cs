@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // 有关程序集的一般信息由以下
 // 控制。更改这些特性值可修改
 // 与程序集关联的信息。
-[assembly: AssemblyTitle("数据迁移数据库 MSSQL 实现")]
+[assembly: AssemblyTitle("数据迁移执行器脱敏实现")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("jhworkshop")]
-[assembly: AssemblyProduct("数据迁移数据库 MSSQL 实现")]
+[assembly: AssemblyProduct("数据迁移执行器脱敏实现")]
 [assembly: AssemblyCopyright("Copyright © jhworkshop 2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // 如果此项目向 COM 公开，则下列 GUID 用于类型库的 ID
-[assembly: Guid("1bff4b1b-1a76-4e63-a178-58f5756e718a")]
+[assembly: Guid("aaa9d809-7dc0-4788-a93f-69d700c14a77")]
 
 // 程序集的版本信息由下列四个值组成: 
 //

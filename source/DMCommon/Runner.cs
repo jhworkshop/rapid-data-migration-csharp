@@ -54,7 +54,8 @@ namespace JHWork.DataMigration.Common
         public string[] SourceFields { get; set; }  // 源字段
         public string[] DestFields { get; set; }    // 目标字段
         public string[] References { get; set; }    // 外键表
-        public ulong Total { get; set; }            // 任务记录数
+        public ulong Progress { get; set; }         // 进度记录数
+        public ulong Total { get; set; }            // 总记录数
     }
 
     /// <summary>
@@ -94,11 +95,45 @@ namespace JHWork.DataMigration.Common
     public class Task
     {
         public string Name { get; set; }       // 名称  
-        public ulong Progress { get; set; }    // 记录数
+        public ulong Progress { get; set; }    // 进度记录数
         public ulong Total { get; set; }       // 总记录数
         public DataStates Status { get; set; } // 状态
         public ulong StartTick { get; set; }   // 开始时间
         public string ErrorMsg { get; set; }   // 错误信息
+    }
+
+    /// <summary>
+    /// 脱敏实例
+    /// 
+    /// MaskingRunner 的实例结构如下：
+    ///
+    /// MaskingInstance
+    ///   + MaskingTask[] （串行）
+    ///       + MaskingTable[] （并行）
+    ///
+    /// 即，每个实例包含一组串行任务，每任务包含一组并行迁移表。
+    /// </summary>
+    public class MaskingInstance : Instance { }
+
+    /// <summary>
+    /// 脱敏表
+    /// </summary>
+    public class MaskingTable : Table
+    {
+        public string[] MaskFields { get; set; } // 脱敏字段
+        public DataStates Status { get; set; }   // 状态
+    }
+
+    /// <summary>
+    /// 脱敏任务
+    /// </summary>
+    public class MaskingTask : Task
+    {
+        public Database Source = new Database();   // 源库
+        public string Params { get; set; }         // 参数脚本
+        public MaskingTable[] Tables { get; set; } // 表
+        public uint ReadPages { get; set; }        // 每次读取数据批次数
+        public uint Threads { get; set; }          // 并行迁移表数
     }
 
     /// <summary>
@@ -121,10 +156,7 @@ namespace JHWork.DataMigration.Common
     /// <summary>
     /// 汇集表
     /// </summary>
-    public class IntegrationTable : Table
-    {
-        public ulong Progress { get; set; } // 汇集记录数
-    }
+    public class IntegrationTable : Table { }
 
     /// <summary>
     /// 汇集任务。
@@ -156,7 +188,6 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public class MigrationTable : Table
     {
-        public ulong Progress { get; set; }    // 迁移记录数
         public DataStates Status { get; set; } // 状态
     }
 

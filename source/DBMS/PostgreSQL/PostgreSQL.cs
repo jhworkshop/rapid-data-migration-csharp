@@ -71,7 +71,9 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             // 有数据
             if (data.Read())
             {
-                if (table.WriteMode == WriteModes.Append)
+                if (table is MaskingTable)
+                    BuildScriptWithMaskSQL(table, data, filter, out script);
+                else if (table.WriteMode == WriteModes.Append)
                     BuildScriptWithDataTable(table, data, filter, out script);
                 else
                     BuildScriptWithMergeSQL(table, data, filter, out script);
@@ -121,6 +123,42 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
 
             script = dt;
+        }
+
+        private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        {
+            string destTable = ProcessTableName(table.DestName);
+            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
+            StringBuilder sb = new StringBuilder();
+            string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
+            string field = ProcessFieldName(fields[0]);
+
+            sb.Append($"update {destTable} A set {field} = B.{field}");
+            for (int i = 1; i < fields.Length; i++)
+            {
+                field = ProcessFieldName(fields[i]);
+                sb.Append($", {field} = B.{field}");
+            }
+            field = ProcessFieldName(table.KeyFields[0]);
+            sb.Append($" from {processedTmpTable} B where A.{field} = B.{field}");
+            for (int i = 1; i < table.KeyFields.Length; i++)
+            {
+                field = ProcessFieldName(table.KeyFields[i]);
+                sb.Append($" and A.{field} = B.{field}");
+            }
+
+            BuildScriptWithDataTable(table, data, filter, out script);
+
+            script = new MergeScript()
+            {
+                TableName = tmpTable,
+                PrepareSQL = $"select {ProcessFieldNames(table.DestFields)} into {processedTmpTable} from {destTable} where 1 = 0",
+                Data = (DataTable)script,
+                UpdateSQL = sb.ToString(),
+                InsertSQL = "",
+                CleanSQL = $"drop table {processedTmpTable}"
+            };
         }
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
@@ -502,7 +540,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                         {
                             if (InternalExecScript(ms.TableName, ms.Data, out count))
                                 if (Execute(ms.UpdateSQL, null, out _))
-                                    if (Execute(ms.InsertSQL, null, out _))
+                                    if (string.IsNullOrEmpty(ms.InsertSQL) || Execute(ms.InsertSQL, null, out _))
                                         return true;
                         }
                         finally
@@ -510,16 +548,16 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                             Execute(ms.CleanSQL, null, out _);
                         }
                 }
-                else if (script is UpdateScript sql)
+                else if (script is UpdateScript us)
                 {
-                    if (Execute(sql.UpdateSQL, null, out count))
+                    if (Execute(us.UpdateSQL, null, out count))
                         if (count == 0)
-                            return Execute(sql.InsertSQL, null, out count);
+                            return Execute(us.InsertSQL, null, out count);
                         else
                             return true;
                 }
-                else if (script is string)
-                    return Execute((string)script, null, out count);
+                else if (script is string sql)
+                    return Execute(sql, null, out count);
             }
             catch (Exception ex)
             {
