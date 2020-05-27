@@ -44,8 +44,8 @@
 {
     "instances": [],       # 实例，不同实例的配置格式可能不同，实例之间是并发执行的，并发数由 threads 控制
     "mode": "Once",        # 执行模式，可以是 Once, Daily, 或者 Continuous
-    "runner": "Migration", # 执行器，可以是 Migration，或者 Integration
-    "runtime": "15:00",    # 执行时间或间隔，格式 hh:mm:ss，Daily 模式下为时间，Continuous 模式下为间隔
+    "runner": "Migration", # 执行器，可以是 Migration，Integration，或者 Masking
+    "runtime": "15:00",    # 执行时间或间隔，格式 hh:mm:ss，Daily 模式下为时刻，Continuous 模式下为间隔
     "threads": 2           # 实例并行数
 }
 ```
@@ -135,7 +135,6 @@
             "keyFields": "FolioID",                                       # 关键字段，多个字段之间用逗号分隔
             "skipFields": "",                                             # 忽略字段，多个字段之间用逗号分隔
             "filter": "",                                                 # 数据过滤器名称
-            "dest.mssql.keepIdentity": 1,                                 # 保留自增字段值，MSSQL 批量复制专用
             "references": ""                                              # 外键引用表，多个表名之间用逗号分隔
         }
     ]

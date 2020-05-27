@@ -1,5 +1,5 @@
-# 快速数据迁移 v1.1
-顾名思义，这是一个将数据从一个数据库快速迁移到另一个数据库的工具项目。与很多同类型项目相比，它主打的特点是“快”！
+# 快速数据迁移 v1.2
+这是一个将数据从一个数据库快速迁移到另一个数据库的工具项目，它主打的特点是“快”！
 
 ## 一、为什么“快”？
 要解释这个问题，首先要说说数据迁移是什么一回事。
@@ -18,7 +18,7 @@
 
 ![](https://ebuy.ucoz.com/rdm/seq3.png)
 
-在某些测试场景下，这项小小的改动，可以获得 30% 的迁移效率提升（因为是未经严谨优化的测试场景，就不具体展开介绍了）！
+在某些测试场景下，这项小小的改动，可以获得 30% 的迁移效率提升！
 
 ## 二、制约迁移效率的其它主要因素
 除了执行机制的制约以外，还有其它一些制约因素会明显影响迁移效率，本项目都有所考量。
@@ -27,9 +27,9 @@
 显然，如果只有一根小水管，算法层面优化能带来的提升空间就不大了，不过也不是什么事情都不能做，比如 MySQL 的客户端就支持压缩传输协议，只需一个连接串的配置项，就能用 CPU 运算能力换来一定的效率提升。
 
 ### 2、目标库写入效率
-通常数据读取效率会高于写入，因此目标库的写入效率对整体效率而言相当关键。如果目标库客户端支持 Bulk Copy，使用批量复制接口，写入效率自然比其它方式更高。在某些测试场景下，批量复制比对数据脚本，效率可提升 20 倍（因为是未经严谨优化的测试场景，就不点名了）！
+通常数据读取效率会高于写入，因此目标库的写入效率对整体效率而言相当关键。如果目标库客户端支持 Bulk Copy，使用批量复制接口，写入效率自然比其它方式更高。在某些测试场景下，批量复制比对数据脚本，效率可提升 20 倍！
 
-这也是优先选择 C# 实现的原因。
+这是优先选择 C# 实现的原因。
 
 ### 3、迁移顺序
 多表并行迁移通常比单表串行迁移效率高，在这个前提下，合理安排迁移顺序，让更多时间处于并行状态，可提升整体效率。
@@ -76,16 +76,13 @@
 | Microsoft Visual Studio | Community 2019 |
 | .NET Framework | 4.8 |
 
-## 五、授权
-MIT License
+## 五、版本历史
 
-Copyright (c) 2020 jhworkshop
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+| 版本 | 发布日期 | 主要特性 |
+| ---- | ---- | ---- |
+| 1.0 | 2020/4/2 | 全接口化，支持迁移和汇集模式，支持 MSSQL、MySQL和PostgreSQL |
+| 1.1 | 2020/4/14 | 优化并行任务调度算法  |
+| 1.2 | 2020/5/25 | 增加脱敏模式  |
 
 ## 六、感谢
 感谢我们的老朋友 [Thomas](https://github.com/gztomash) 贡献了大部分实现代码。
