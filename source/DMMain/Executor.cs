@@ -24,17 +24,12 @@ namespace JHWork.DataMigration
         /// <summary>
         /// 停止执行标志
         /// </summary>
-        private bool stopped = false;
+        public bool Stopped { get; private set; } = false;
 
         /// <summary>
         /// 执行器状态
         /// </summary>
         public ExecutorState State { get; private set; } = ExecutorState.Idle;
-
-        public bool IsStopped()
-        {
-            return stopped;
-        }
 
         private void InternalRunWithCallback(object obj)
         {
@@ -84,7 +79,7 @@ namespace JHWork.DataMigration
         /// <param name="profile">配置</param>
         public void Run(Profile profile)
         {
-            stopped = false;
+            Stopped = false;
 
             profile.Reset();
             new Thread(InternalRunWithCallback).Start(profile);
@@ -108,7 +103,7 @@ namespace JHWork.DataMigration
         {
             State = ExecutorState.Planning;
 
-            while (!stopped)
+            while (!Stopped)
             {
                 Thread.Sleep(1);
                 if (DateTime.Now >= profile.RunTime)
@@ -124,7 +119,7 @@ namespace JHWork.DataMigration
         /// </summary>
         public void Stop()
         {
-            stopped = true;
+            Stopped = true;
         }
 
         /// <summary>
@@ -133,7 +128,7 @@ namespace JHWork.DataMigration
         /// <param name="profile">配置</param>
         public void Test(Profile profile)
         {
-            stopped = false;
+            Stopped = false;
             State = ExecutorState.Testing;
 
             profile.Reset();

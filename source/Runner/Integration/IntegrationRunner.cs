@@ -466,7 +466,7 @@ namespace JHWork.DataMigration.Runner.Integration
         private void IntegrateTask(IntegrationTask task, out string reason)
         {
             reason = "取消操作";
-            if (status.IsStopped()) return;
+            if (status.Stopped) return;
 
             if (Connect(task, task.Dest, out IDBMSWriter dest))
             {
@@ -520,7 +520,7 @@ namespace JHWork.DataMigration.Runner.Integration
 
                         foreach (Database db in task.Sources)
                         {
-                            if (status.IsStopped() || task.Status == DataStates.Error) break;
+                            if (status.Stopped || task.Status == DataStates.Error) break;
 
                             uint fromRow = 1, toRow = task.ReadPages * task.Table.PageSize;
                             Dictionary<string, object> tmpParams = new Dictionary<string, object>(parms);
@@ -536,10 +536,10 @@ namespace JHWork.DataMigration.Runner.Integration
                             while (true)
                             {
                                 // 等待缓冲区可用
-                                while (scripts.Count > bufSize && !status.IsStopped() && task.Status != DataStates.Error)
+                                while (scripts.Count > bufSize && !status.Stopped && task.Status != DataStates.Error)
                                     Thread.Sleep(50);
 
-                                if (status.IsStopped() || task.Status == DataStates.Error) break;
+                                if (status.Stopped || task.Status == DataStates.Error) break;
 
                                 // 取数
                                 if (source.QueryPage(task.Table, fromRow, toRow, WithEnums.NoLock, tmpParams, out data))
@@ -549,12 +549,12 @@ namespace JHWork.DataMigration.Runner.Integration
 
                                         data.MapFields(task.Table.DestFields);
                                         while (dest.BuildScript(task.Table, data, filter, out script)
-                                            && !status.IsStopped() && task.Status != DataStates.Error)
+                                            && !status.Stopped && task.Status != DataStates.Error)
                                             scripts.Enqueue(script);
 
                                         // 获取不到预期的记录数，作最后一页处理
                                         if (data.ReadCount != task.ReadPages * task.Table.PageSize
-                                            || status.IsStopped()) break;
+                                            || status.Stopped) break;
                                     }
                                     finally
                                     {
@@ -578,7 +578,7 @@ namespace JHWork.DataMigration.Runner.Integration
                     // “写”线程：写失败则直接停止执行
                     else if ("write".Equals(act))
                     {
-                        while (task.Status != DataStates.Error && (!read || scripts.Count > 0) && !status.IsStopped())
+                        while (task.Status != DataStates.Error && (!read || scripts.Count > 0) && !status.Stopped)
                             if (scripts.Count > 0)
                             {
                                 scripts.TryDequeue(out object script);
@@ -606,7 +606,7 @@ namespace JHWork.DataMigration.Runner.Integration
                 }
             });
 
-            if (task.Status == DataStates.Error || task.Status == DataStates.RunningError || status.IsStopped())
+            if (task.Status == DataStates.Error || task.Status == DataStates.RunningError || status.Stopped)
             {
                 task.Status = DataStates.Error;
                 failReason = reason;
@@ -644,7 +644,7 @@ namespace JHWork.DataMigration.Runner.Integration
 
             foreach (Common.Task t in ins.Tasks)
             {
-                if (status.IsStopped()) break;
+                if (status.Stopped) break;
 
                 if (t is IntegrationTask task)
                 {
@@ -672,7 +672,7 @@ namespace JHWork.DataMigration.Runner.Integration
 
                                 foreach (Database db in task.Sources)
                                 {
-                                    if (task.Status != DataStates.Error && !status.IsStopped())
+                                    if (task.Status != DataStates.Error && !status.Stopped)
                                         if (Connect(task, db, out source))
                                         {
                                             bool isError = true;

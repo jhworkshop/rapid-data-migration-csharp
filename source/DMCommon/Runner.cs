@@ -277,7 +277,7 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public interface IStopStatus
     {
-        bool IsStopped();
+        bool Stopped { get; }
     }
 
     /// <summary>

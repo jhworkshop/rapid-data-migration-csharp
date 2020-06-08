@@ -14,12 +14,10 @@ namespace JHWork.DataMigration.Common
     {
         private static readonly List<StringBuilder> bufLog = new List<StringBuilder>();
         private static readonly List<StringBuilder> bufRpt = new List<StringBuilder>();
-        private static readonly object lockLog = new object();
-        private static readonly object lockRpt = new object();
         private static string rptFile = "";
         private static readonly string rptPath = AppDomain.CurrentDomain.BaseDirectory + "Report\\";
         private static readonly string logPath = AppDomain.CurrentDomain.BaseDirectory + "Log\\";
-        private static bool StopFlag { get; set; } = false;
+        private static bool StopFlag = false;
 
         static Logger()
         {
@@ -64,7 +62,7 @@ namespace JHWork.DataMigration.Common
                 {
                     List<StringBuilder> sb = new List<StringBuilder>();
 
-                    lock (lockRpt)
+                    lock (bufRpt)
                     {
                         sb.AddRange(bufRpt);
                         bufRpt.Clear();
@@ -78,7 +76,7 @@ namespace JHWork.DataMigration.Common
                 {
                     List<StringBuilder> sb = new List<StringBuilder>();
 
-                    lock (lockLog)
+                    lock (bufLog)
                     {
                         sb.AddRange(bufLog);
                         bufLog.Clear();
@@ -117,7 +115,7 @@ namespace JHWork.DataMigration.Common
             StringBuilder sb = new StringBuilder(DateTime.Now.ToString("HH:mm:ss.fff"))
                 .Append(" [").Append(title).Append("] - ").Append(content);
 
-            lock (lockLog)
+            lock (bufLog)
             {
                 bufLog.Add(sb);
             }
@@ -158,7 +156,7 @@ namespace JHWork.DataMigration.Common
             else
                 sb.Append(reason);
 
-            lock (lockRpt)
+            lock (bufRpt)
             {
                 bufRpt.Add(sb);
             }

@@ -208,7 +208,7 @@ namespace JHWork.DataMigration.Runner.Masking
 
             foreach (Common.Task t in ins.Tasks)
             {
-                if (status.IsStopped()) break;
+                if (status.Stopped) break;
 
                 if (t is MaskingTask task && task.Tables.Length > 0)
                 {
@@ -255,7 +255,7 @@ namespace JHWork.DataMigration.Runner.Masking
                             }
                         });
 
-                        if (status.IsStopped() || task.Status == DataStates.RunningError || task.Status == DataStates.Error)
+                        if (status.Stopped || task.Status == DataStates.RunningError || task.Status == DataStates.Error)
                         {
                             task.Status = DataStates.Error;
                             Logger.WriteLog($"{task.Source.Server}/{task.Source.DB}", "脱敏失败！");
@@ -335,7 +335,7 @@ namespace JHWork.DataMigration.Runner.Masking
         private void MaskTable(MaskingTask task, MaskingTable table, out string reason)
         {
             reason = "取消操作";
-            if (status.IsStopped()) return;
+            if (status.Stopped) return;
 
             if (Connect(task, task.Source, out IDBMSReader source, out IDBMSWriter dest))
             {
@@ -347,7 +347,7 @@ namespace JHWork.DataMigration.Runner.Masking
                 {
                     // 迁移数据
                     MaskTableWithScript(task, table, parms, source, dest, out reason);
-                    if (table.Status != DataStates.Error && !status.IsStopped())
+                    if (table.Status != DataStates.Error && !status.Stopped)
                     {
                         dest.CommitTransaction();
                         table.Status = DataStates.Done;
@@ -395,10 +395,10 @@ namespace JHWork.DataMigration.Runner.Masking
 
                         while (true)
                         {
-                            while (scripts.Count > bufSize && !status.IsStopped() && table.Status != DataStates.Error)
+                            while (scripts.Count > bufSize && !status.Stopped && table.Status != DataStates.Error)
                                 Thread.Sleep(50);
 
-                            if (status.IsStopped() || table.Status == DataStates.Error) break;
+                            if (status.Stopped || table.Status == DataStates.Error) break;
 
                             if (source.QueryPage(table, fromRow, toRow, WithEnums.NoLock, parms, out data))
                                 try
@@ -407,11 +407,11 @@ namespace JHWork.DataMigration.Runner.Masking
 
                                     data.MapFields(table.DestFields);
                                     while (dest.BuildScript(table, data, filter, out script)
-                                        && !status.IsStopped() && table.Status != DataStates.Error)
+                                        && !status.Stopped && table.Status != DataStates.Error)
                                         scripts.Enqueue(script);
 
                                     // 获取不到预期的记录数，作最后一页处理
-                                    if (data.ReadCount != task.ReadPages * table.PageSize || status.IsStopped()) break;
+                                    if (data.ReadCount != task.ReadPages * table.PageSize || status.Stopped) break;
                                 }
                                 finally
                                 {
@@ -432,7 +432,7 @@ namespace JHWork.DataMigration.Runner.Masking
                     }
                     else if ("write".Equals(act))
                     {
-                        while (table.Status != DataStates.Error && (!read || scripts.Count > 0) && !status.IsStopped())
+                        while (table.Status != DataStates.Error && (!read || scripts.Count > 0) && !status.Stopped)
                             if (scripts.Count > 0)
                             {
                                 scripts.TryDequeue(out object script);
@@ -469,7 +469,7 @@ namespace JHWork.DataMigration.Runner.Masking
 
             foreach (Common.Task t in ins.Tasks)
             {
-                if (status.IsStopped()) break;
+                if (status.Stopped) break;
 
                 if (t is MaskingTask task)
                 {
@@ -483,7 +483,7 @@ namespace JHWork.DataMigration.Runner.Masking
                         dest.QueryParam(task.Params, parms);
 
                         for (int i = 0; i < task.Tables.Length; i++)
-                            if (!status.IsStopped())
+                            if (!status.Stopped)
                             {
                                 task.Tables[i].Status = DataStates.Running;
                                 PrefetchTable(task, task.Tables[i], parms, source);
