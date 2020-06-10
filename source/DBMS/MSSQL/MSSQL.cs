@@ -8,14 +8,6 @@ using System.Text;
 namespace JHWork.DataMigration.DBMS.MSSQL
 {
     /// <summary>
-    /// 表外键信息
-    /// </summary>
-    internal class TableFK : TableInfo
-    {
-        public List<string> FKs { get; } = new List<string>(); // 外键指向表
-    }
-
-    /// <summary>
     /// 基于 DataTable 的追加数据脚本对象
     /// </summary>
     internal class AppendScript
@@ -35,15 +27,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         public string MergeSQL { get; set; }   // 合并 SQL
         public string MergeSQL2 { get; set; }  // 合并 SQL，用于不支持 MERGE INTO 语法的版本
         public string CleanSQL { get; set; }   // 清理 SQL
-    }
-
-    /// <summary>
-    /// 基于更新和插入 SQL 的更新数据脚本对象
-    /// </summary>
-    internal class UpdateScript
-    {
-        public string UpdateSQL { get; set; } // 更新 SQL
-        public string InsertSQL { get; set; } // 插入 SQL
     }
 
     /// <summary>
@@ -540,7 +523,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     {
                         data.Close();
                     }
-
                 }
 
                 fk.KeyFields = keys.ToArray();
@@ -736,8 +718,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
         }
 
-        public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms,
-            out ulong count)
+        public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count)
         {
             StringBuilder sb = new StringBuilder()
                 .Append("SELECT COUNT(*) AS '_ROW_COUNT_' FROM ").Append(ProcessTableName(table.SourceName, with));
@@ -754,14 +735,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 try
                 {
                     if (data.Read())
-                    {
-                        object o = data.GetValue(0);
-
-                        if (o.GetType() == typeof(long))
-                            count = (ulong)(long)o;
-                        else
-                            count = (ulong)(int)o;
-                    }
+                        count = ulong.Parse(data.GetValue(0).ToString());
 
                     return true;
                 }
@@ -873,7 +847,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // FROM <tableName>
                 // {WHERE <whereSQL>}
                 // ) A WHERE [_RowNum_] BETWEEN <fromRow> AND <toRow>) A ON <B.keyFields> = <A.keyFields>
-                //
                 if (table.KeyFields.Length > 1)
                 {
                     string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
@@ -886,16 +859,13 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT {keyFields} FROM")
                         .Append($" (SELECT {keyFieldsWithAlias}, ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
                         .Append($" AS '_RowNum_' FROM {tableName}");
-
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
                         if (table.WhereSQL.IndexOf(" WEHRE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append($" {table.WhereSQL}");
                     }
-
                     sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}) A ON B.{keyField} = A.{keyField}");
-
                     for (int i = 1; i < table.KeyFields.Length; i++)
                     {
                         keyField = ProcessFieldName(table.KeyFields[i]);
@@ -909,14 +879,12 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                     sb.Append($"SELECT {fieldsSQL} FROM (SELECT ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
                         .Append($" AS '_RowNum_', {fieldsWithAlias} FROM {ProcessTableName(table.SourceName, with)}");
-
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
                         if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                             sb.Append(" WHERE");
                         sb.Append($" {table.WhereSQL}");
                     }
-
                     sb.Append($") A WHERE A.[_RowNum_] BETWEEN {fromRow} AND {toRow}");
                 }
             }
@@ -939,14 +907,12 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                 sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableNameWith}")
                     .Append($" LEFT JOIN (SELECT TOP {fromRow - 1} {keyFieldsSQL} FROM {tableNameWith}");
-
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
                     if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
                         sb.Append(" WHERE");
                     sb.Append($" {table.WhereSQL}");
                 }
-
                 sb.Append($" ORDER BY {table.OrderSQL}) B ON ").Append($"{tableName}.{keyField} = B.{keyField}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
@@ -961,8 +927,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 }
                 else
                     sb.Append($" WHERE B.{keyField} IS NULL");
-
-
                 sb.Append($" ORDER BY {table.OrderSQL}");
             }
 
@@ -1015,5 +979,22 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 trans = null;
             }
         }
+    }
+
+    /// <summary>
+    /// 表外键信息
+    /// </summary>
+    internal class TableFK : TableInfo
+    {
+        public List<string> FKs { get; } = new List<string>(); // 外键指向表
+    }
+
+    /// <summary>
+    /// 基于更新和插入 SQL 的更新数据脚本对象
+    /// </summary>
+    internal class UpdateScript
+    {
+        public string UpdateSQL { get; set; } // 更新 SQL
+        public string InsertSQL { get; set; } // 插入 SQL
     }
 }

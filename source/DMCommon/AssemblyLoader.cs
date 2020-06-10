@@ -44,21 +44,22 @@ namespace JHWork.DataMigration.Common
         {
             if (Directory.Exists(basePath))
             {
-                string[] files = Directory.GetFiles(basePath, "*.dll");
+                string[] files = Directory.GetFiles(basePath, "*.dll", SearchOption.TopDirectoryOnly);
 
                 foreach (string file in files)
                     try
                     {
                         Assembly asm = Assembly.LoadFrom(file);
 
-                        foreach (Type t in asm.GetTypes())
+                        foreach (Type t in asm.ExportedTypes)
                             if (t.GetInterface("IAssemblyLoader") != null && t.GetInterface(intfName) != null)
-                            {
-                                IAssemblyLoader loader = asm.CreateInstance(t.FullName, true) as IAssemblyLoader;
-
-                                lst.Add(loader.GetName().ToLower(),
-                                    new AssemblyInfo() { Asm = asm, Name = t.FullName, DisplayName = loader.GetName() });
-                            }
+                                if (asm.CreateInstance(t.FullName, true) is IAssemblyLoader loader)
+                                    lst.Add(loader.GetName().ToLower(),
+                                        new AssemblyInfo() {
+                                            Asm = asm,
+                                            Name = t.FullName,
+                                            DisplayName = loader.GetName()
+                                        });
                     }
                     catch (Exception ex)
                     {

@@ -4,4 +4,5 @@
 | ------ | -------- | :--: | :--: | :--: |
 | MSSQL | Microsoft SQL Server | √ | √ | √ |
 | MySQL | MySQL | √ | √ | √ |
+| Oracle | Oracle | √ | √ | √ |
 | PostgreSQL | PostgreSQL | √ | √ | √ |

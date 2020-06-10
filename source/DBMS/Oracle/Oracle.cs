@@ -1,43 +1,37 @@
 ﻿using JHWork.DataMigration.Common;
-using Npgsql;
-using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Client;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Text;
 
-namespace JHWork.DataMigration.DBMS.PostgreSQL
+namespace JHWork.DataMigration.DBMS.Oracle
 {
     /// <summary>
     /// 基于合并算法的更新数据脚本对象
     /// </summary>
     internal class MergeScript
     {
-        public string TableName { get; set; }  // 临表名称
         public string PrepareSQL { get; set; } // 准备 SQL（创建临表）
-        public DataTable Data { get; set; }    // 数据
-        public string UpdateSQL { get; set; }  // 更新 SQL
-        public string InsertSQL { get; set; }  // 插入 SQL
+        public string InsertSQL { get; set; }  // 数据
+        public string MergeSQL { get; set; }   // 更新 SQL
         public string CleanSQL { get; set; }   // 清理 SQL
+        public string CleanSQL2 { get; set; }  // 清理 SQL 2
     }
 
-    /// <summary>
-    /// PostgreSQL
-    /// </summary>
-    public class PostgreSQL : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class Oracle : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
-        private NpgsqlConnection conn;
-        private NpgsqlTransaction trans = null;
+        private readonly OracleConnection conn = new OracleConnection();
+        private OracleTransaction trans = null;
         private string errMsg = "";
-        private string title = "PostgreSQL";
-        private bool isRollback = false;
+        private string title = "Oracle";
+        private string schema = "";
 
         public bool BeginTransaction()
         {
             try
             {
                 trans = conn.BeginTransaction();
-                isRollback = false;
 
                 return true;
             }
@@ -52,13 +46,12 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         public bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            // 有数据
             if (data.Read())
             {
                 if (table is MaskingTable)
                     BuildScriptWithMaskSQL(table, data, filter, out script);
                 else if (table.WriteMode == WriteModes.Append)
-                    BuildScriptWithDataTable(table, data, filter, out script);
+                    BuildScriptWithInsertSQL(table, table.DestName, data, filter, out script);
                 else
                     BuildScriptWithMergeSQL(table, data, filter, out script);
 
@@ -72,140 +65,128 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        private void BuildScriptWithDataTable(Table table, IDataWrapper data, IDataFilter filter, out object script)
+        private void BuildScriptWithInsertSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
+            out object script)
         {
-            // 创建数据表，字段清单与目标表须一致
-            DataTable dt = new DataTable();
-
-            for (int i = 0; i < table.DestFields.Length; i++)
-                dt.Columns.Add(table.DestFields[i], data.GetFieldType(i));
-
-            // 给跳过字段名称增加一个前缀，这样字段映射后取值就为 NULL
-            string[] fields = ModifyFields(table.DestFields, table.SkipFields, "!!!");
+            StringBuilder sb = new StringBuilder();
+            string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
+            string fieldsSQL = ProcessFieldNames(fields);
+            string tableSQL = ProcessTableName(tableName);
 
             data.MapFields(fields);
 
-            // 添加第一笔记录，仍然使用正确的字段名
-            DataRow row = dt.NewRow();
+            sb.Append("INSERT ALL").AppendLine().Append($"INTO {tableSQL} ({fieldsSQL}) VALUES (")
+                .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+            for (int i = 1; i < fields.Length; i++)
+                sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
+            sb.Append(")");
 
-            for (int i = 0; i < table.DestFields.Length; i++)
-                row[i] = filter.GetValue(data, i, table.DestFields[i]);
-
-            dt.Rows.Add(row);
-
-            // 添加后续记录，仍然使用正确的字段名
             int r = 1;
             while (r < table.PageSize && data.Read())
             {
-                row = dt.NewRow();
-
-                for (int i = 0; i < table.DestFields.Length; i++)
-                    row[i] = filter.GetValue(data, i, table.DestFields[i]);
-
-                dt.Rows.Add(row);
                 r++;
+                sb.AppendLine().Append($"INTO {tableSQL} ({fieldsSQL}) VALUES (")
+                    .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+                for (int i = 1; i < fields.Length; i++)
+                    sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
+                sb.Append(")");
             }
+            sb.AppendLine().Append("SELECT * FROM DUAL");
 
-            script = dt;
+            script = sb.ToString();
         }
 
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string tmpTable = ProcessTableName($"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}");
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
-            string field = ProcessFieldName(fields[0]);
+            string field = ProcessFieldName(table.KeyFields[0]);
 
-            sb.Append($"update {destTable} A set {field} = B.{field}");
-            for (int i = 1; i < fields.Length; i++)
-            {
-                field = ProcessFieldName(fields[i]);
-                sb.Append($", {field} = B.{field}");
-            }
-            field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append($" from {processedTmpTable} B where A.{field} = B.{field}");
+            sb.Append($"MERGE INTO {destTable} A USING {tmpTable} B ON (A.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append($" and A.{field} = B.{field}");
+                sb.Append($" AND A.{field} = B.{field}");
             }
+            sb.Append(")");
 
-            BuildScriptWithDataTable(table, data, filter, out script);
+            field = ProcessFieldName(fields[0]);
+            sb.AppendLine().Append($" WHEN MATCHED THEN UPDATE SET A.{field} = B.{field}");
+            for (int i = 1; i < fields.Length; i++)
+            {
+                field = ProcessFieldName(fields[i]);
+                sb.Append($", A.{field} = B.{field}");
+            }
+            sb.Append(";"); // 语句以分号结尾
 
+            BuildScriptWithInsertSQL(table, tmpTable, data, filter, out script);
             script = new MergeScript()
             {
-                TableName = tmpTable,
-                PrepareSQL = $"select {ProcessFieldNames(table.DestFields)} into {processedTmpTable} from {destTable} where 1 = 0",
-                Data = (DataTable)script,
-                UpdateSQL = sb.ToString(),
-                InsertSQL = "",
-                CleanSQL = $"drop table {processedTmpTable}"
+                PrepareSQL = $"CREATE GLOBAL TEMPORARY TABLE {tmpTable} ON COMMIT PRESERVE ROWS AS SELECT * FROM {destTable} WHERE 1 = 0",
+                InsertSQL = script as string,
+                MergeSQL = sb.ToString(),
+                CleanSQL = $"TRUNCATE TABLE {tmpTable}",
+                CleanSQL2 = $"DROP TABLE {tmpTable}"
             };
         }
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string tmpTable = ProcessTableName($"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}");
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
-            string field = ProcessFieldName(fields[0]);
+            string field = ProcessFieldName(table.KeyFields[0]);
 
-            sb.Append($"update {destTable} A set {field} = B.{field}");
+            sb.Append($"MERGE INTO {destTable} A USING {tmpTable} B ON (A.{field} = B.{field}");
+            for (int i = 1; i < table.KeyFields.Length; i++)
+            {
+                field = ProcessFieldName(table.KeyFields[i]);
+                sb.Append($" AND A.{field} = B.{field}");
+            }
+            sb.Append(")");
+            field = ProcessFieldName(fields[0]);
+            sb.AppendLine().Append($" WHEN MATCHED THEN UPDATE SET A.{field} = B.{field}");
             for (int i = 1; i < fields.Length; i++)
             {
                 field = ProcessFieldName(fields[i]);
-                sb.Append($", {field} = B.{field}");
+                sb.Append($", A.{field} = B.{field}");
             }
-            field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append($" from {processedTmpTable} B where A.{field} = B.{field}");
-            for (int i = 1; i < table.KeyFields.Length; i++)
-            {
-                field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append($" and A.{field} = B.{field}");
-            }
-
-            string updateSQL = sb.ToString();
 
             fields = ExcludeFields(table.DestFields, table.SkipFields);
-            sb.Length = 0;
-            field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append($"insert into {destTable} ({ProcessFieldNames(fields)}) select {ProcessFieldNames(fields, "A")}")
-                .Append($" from {processedTmpTable} A left join {destTable} B on A.{field} = B.{field}");
-            for (int i = 1; i < table.KeyFields.Length; i++)
-            {
-                field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append($" and A.{field} = B.{field}");
-            }
-            sb.Append($" where B.{field} is null");
+            sb.AppendLine().Append($" WHEN NOT MATCHED THEN INSERT ({ProcessFieldNames(fields)}")
+                .Append($") VALUES ({ProcessFieldNames(fields, "B")});"); // 语句以分号结尾
 
-            BuildScriptWithDataTable(table, data, filter, out script);
-
+            BuildScriptWithInsertSQL(table, tmpTable, data, filter, out script);
             script = new MergeScript()
             {
-                TableName = tmpTable,
-                PrepareSQL = $"select * into {processedTmpTable} from {destTable} where 1 = 0",
-                Data = (DataTable)script,
-                UpdateSQL = updateSQL,
-                InsertSQL = sb.ToString(),
-                CleanSQL = $"drop table {processedTmpTable}"
+                PrepareSQL = $"CREATE GLOBAL TEMPORARY TABLE {tmpTable} ON COMMIT PRESERVE ROWS AS SELECT * FROM {destTable} WHERE 1 = 0",
+                InsertSQL = script as string,
+                MergeSQL = sb.ToString(),
+                CleanSQL = $"TRUNCATE TABLE {tmpTable}",
+                CleanSQL2 = $"DROP TABLE {tmpTable}"
             };
+        }
+
+        private string BytesToStr(byte[] bytes)
+        {
+            if (bytes == null) return "NULL";
+
+            StringBuilder sb = new StringBuilder("0x", bytes.Length * 2 + 4); // 冗余两个字符，确保不触发内存扩展
+
+            foreach (byte b in bytes)
+                sb.Append(b.ToString("X2"));
+
+            return sb.ToString();
         }
 
         public void Close()
         {
             try
             {
-                if (isRollback)
-                    conn = null; // 为适应异步回滚，此处只做引用数清零
-                else
-                {
-                    conn.Close();
-                    conn = null;
-                }
+                conn.Close();
             }
             catch { }
         }
@@ -233,19 +214,24 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         public bool Connect(Database db)
         {
-            string encrypt = db.Encrypt ? "Require" : "Disable";
-
             title = $"{db.Server}/{db.DB}";
+
+            string[] ss = db.DB.Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (ss.Length > 1)
+                schema = ss[1];
+            else
+                schema = "";
 
             try
             {
-                if (conn != null) conn.Close();
-                conn = new NpgsqlConnection
-                {
-                    ConnectionString = $"Server={db.Server};Port={db.Port};Database={db.DB};Userid={db.User}"
-                        + $";Password={db.Pwd};Pooling=false;Persist Security Info=True;SslMode={encrypt}"
-                };
+                conn.Close();
+                conn.ConnectionString = $"Data Source={db.Server}:{db.Port}/{ss[0]};User ID={db.User}"
+                    + $";Password={db.Pwd};Pooling=false;Persist Security Info=True";
                 conn.Open();
+
+                if (!string.IsNullOrWhiteSpace(schema))
+                    Execute($"ALTER SESSION SET CURRENT_SCHEMA = {schema}", null, out _);
 
                 return true;
             }
@@ -305,19 +291,41 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         public bool ExecScript(Table table, object script, out uint count)
         {
-            return InternalExecScript(table.DestName, script, out count);
+            count = 0;
+            if (script is string sql)
+                return Execute(sql, null, out count);
+            else if (script is MergeScript ms)
+            {
+                if (Execute(ms.PrepareSQL, null, out _))
+                    try
+                    {
+                        if (Execute(ms.InsertSQL, null, out count))
+                            if (Execute(ms.MergeSQL, null, out _))
+                                return true;
+                    }
+                    finally
+                    {
+                        Execute(ms.CleanSQL, null, out _);
+                        Execute(ms.CleanSQL2, null, out _);
+                    }
+            }
+
+            return false;
         }
 
         private bool Execute(string sql, Dictionary<string, object> parms, out uint count)
         {
-            count = 0;
             try
             {
-                NpgsqlCommand cmd = new NpgsqlCommand(sql, conn, trans);
+                OracleCommand cmd = new OracleCommand(sql, conn)
+                {
+                    CommandType = CommandType.Text,
+                    Transaction = trans
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
-                        cmd.Parameters.AddWithValue(key, parms[key]);
+                        cmd.Parameters.Add(key, parms[key]);
 
                 count = (uint)cmd.ExecuteNonQuery();
 
@@ -328,6 +336,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 errMsg = ex.Message;
                 Logger.WriteLogExcept(title, ex);
                 Logger.WriteLog(title, sql);
+                count = 0;
 
                 return false;
             }
@@ -335,7 +344,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         public bool GetFieldNames(string tableName, out string[] fieldNames)
         {
-            if (Query($"select * from {ProcessTableName(tableName)} where 1 = 0", null, out IDataWrapper data))
+            if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, out IDataWrapper data))
                 try
                 {
                     fieldNames = data.GetFieldNames();
@@ -349,9 +358,24 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             else
             {
                 fieldNames = null;
-
                 return false;
             }
+        }
+
+        private string GetFmtValue(object obj)
+        {
+            if (obj is DBNull)
+                return "NULL";
+            else if (obj is string)
+                return ProcessString(obj as string);
+            else if (obj is DateTime dt)
+                return ProcessString(dt.ToString("yyyy-MM-dd HH:mm:ss.fff"));
+            else if (obj is bool b)
+                return b ? "1" : "0";
+            else if (obj is byte[])
+                return BytesToStr(obj as byte[]);
+            else
+                return obj.ToString();
         }
 
         public string GetLastError()
@@ -361,7 +385,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         public string GetName()
         {
-            return "PostgreSQL";
+            return "Oracle";
         }
 
         public bool GetTables(IProgress progress, List<TableInfo> lst)
@@ -370,8 +394,10 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             int total = 0, position = 0;
 
             // 获取所有用户表清单
-            if (Query("select tablename from pg_tables where schemaname = 'public' order by tablename asc", null,
-                out IDataWrapper data))
+            string sql = "SELECT TABLE_NAME FROM ALL_ALL_TABLES";
+
+            if (!string.IsNullOrWhiteSpace(schema)) sql += $" WHERE OWNER = '{schema}'";
+            if (Query(sql + " ORDER BY TABLE_NAME ASC", null, out IDataWrapper data))
                 try
                 {
                     while (data.Read())
@@ -389,9 +415,11 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             {
                 List<string> keys = new List<string>();
 
-                if (Query("select C.attname from pg_constraint A join pg_class B on A.conrelid = B.oid "
-                    + "join pg_attribute C on C.attrelid = B.oid and ARRAY_POSITION(A.conkey, C.attnum) > 0 where "
-                    + $"B.relname = '{fk.Name}' and A.contype = 'p' order by C.attname asc", null, out data))
+                sql = "SELECT A.COLUMN_NAME FROM ALL_CONS_COLUMNS A JOIN ALL_CONSTRAINTS B"
+                    + " ON A.CONSTRAINT_NAME = B.CONSTRAINT_NAME AND B.CONSTRAINT_TYPE = 'P'"
+                    + $" AND B.TABLE_NAME = '{fk.Name}'";
+                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND B.OWNER = '{schema}'";
+                if (Query(sql + " ORDER BY A.COLUMN_NAME ASC", null, out data))
                 {
                     try
                     {
@@ -410,10 +438,11 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             // 获取每个表的外键指向的表清单
             foreach (TableFK fk in fks)
             {
-                if (Query("select A.relname from pg_class A "
-                    + "join pg_constraint B on B.confrelid = A.oid and B.contype = 'f' "
-                    + $"join pg_class C on C.oid = B.conrelid and C.relname = '{fk.Name}' "
-                    + "order by A.relname asc", null, out data))
+                sql = "SELECT A.TABLE_NAME FROM ALL_CONSTRAINTS A JOIN ALL_CONSTRAINTS B"
+                    + " ON A.CONSTRAINT_NAME = B.R_CONSTRAINT_NAME AND B.CONSTRAINT_TYPE = 'R'"
+                    + $" AND B.TABLE_NAME = '{fk.Name}'";
+                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND B.OWNER = '{schema}'";
+                if (Query(sql, null, out data))
                 {
                     try
                     {
@@ -434,7 +463,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     fk.Order = order;
 
             order += 100;
-            while (order < 10000) // 设定一个级别上限：100 级
+            while (order <= 10000) // 设定一个级别上限：100 级
             {
                 int left = 0;
                 List<TableFK> lastList = new List<TableFK>();
@@ -488,96 +517,6 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             lst.Sort(new TableInfoComparer());
 
             return true;
-
-        }
-
-        private bool InternalExecScript(string table, object script, out uint count)
-        {
-            count = 0;
-            try
-            {
-                if (script is DataTable dt)
-                {
-                    using (NpgsqlBinaryImporter writer = conn.BeginBinaryImport(
-                        $"copy {ProcessTableName(table)} from stdin binary"))
-                    {
-                        foreach (DataRow row in dt.Rows)
-                        {
-                            object[] values = row.ItemArray;
-
-                            writer.StartRow();
-                            for (int i = 0; i < values.Length; i++)
-                            {
-                                object value = values[i];
-
-                                if (value == DBNull.Value || value == null)
-                                    writer.WriteNull();
-                                else if (dt.Columns[i].DataType == typeof(bool))
-                                    writer.Write((bool)value, NpgsqlDbType.Bit);
-                                else
-                                    writer.Write(value);
-                            }
-                        }
-                    }
-
-                    count = (uint)dt.Rows.Count;
-
-                    return true;
-                }
-                else if (script is MergeScript ms)
-                {
-                    if (Execute(ms.PrepareSQL, null, out _))
-                        try
-                        {
-                            if (InternalExecScript(ms.TableName, ms.Data, out count))
-                                if (Execute(ms.UpdateSQL, null, out _))
-                                    if (string.IsNullOrEmpty(ms.InsertSQL) || Execute(ms.InsertSQL, null, out _))
-                                        return true;
-                        }
-                        finally
-                        {
-                            Execute(ms.CleanSQL, null, out _);
-                        }
-                }
-                else if (script is UpdateScript us)
-                {
-                    if (Execute(us.UpdateSQL, null, out count))
-                        if (count == 0)
-                            return Execute(us.InsertSQL, null, out count);
-                        else
-                            return true;
-                }
-                else if (script is string sql)
-                    return Execute(sql, null, out count);
-            }
-            catch (Exception ex)
-            {
-                errMsg = $"{table}：{ex.Message}";
-                Logger.WriteLogExcept(title, ex);
-            }
-
-            return false;
-        }
-
-        private string[] ModifyFields(string[] fields, string[] skipFields, string prefix)
-        {
-            if (skipFields == null || skipFields.Length == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>(), skipList = new List<string>();
-
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-                foreach (string s in fields)
-                    if (skipList.Contains(s.ToLower()))
-                        lst.Add(prefix + s);
-                    else
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
         }
 
         private string ProcessFieldName(string fieldName, string prefix = "")
@@ -589,7 +528,10 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             else if (prefix.Length > 0)
                 prefix += ".";
 
-            return $"{prefix}\"{fieldName}\"";
+            if (fieldName.StartsWith("\""))
+                return prefix + fieldName;
+            else
+                return prefix + $"\"{fieldName}\"";
         }
 
         private string ProcessFieldNames(string[] fields, string prefix = "")
@@ -613,20 +555,48 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        private string ProcessTableName(string tableName)
+        private string ProcessString(string s)
         {
-            return $"\"{tableName}\"";
+            if (string.IsNullOrEmpty(s))
+                return "''";
+            else
+            {
+                if (s.IndexOf('\'') >= 0)
+                    s = s.Replace("'", "''");
+
+                return $"'{s}'";
+            }
+        }
+
+        private string ProcessTableName(string tableName, string alias = "")
+        {
+            if (string.IsNullOrEmpty(tableName))
+                return "";
+            else
+            {
+                if (!tableName.StartsWith("\""))
+                    tableName = $"\"{tableName}\"";
+
+                if (!string.IsNullOrEmpty(alias))
+                    tableName += $" {alias}";
+
+                return tableName;
+            }
         }
 
         private bool Query(string sql, Dictionary<string, object> parms, out IDataWrapper reader)
         {
             try
             {
-                NpgsqlCommand cmd = new NpgsqlCommand(sql, conn, trans);
+                OracleCommand cmd = new OracleCommand(sql, conn)
+                {
+                    CommandType = CommandType.Text,
+                    Transaction = trans
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
-                        cmd.Parameters.AddWithValue(key, parms[key]);
+                        cmd.Parameters.Add(key, parms[key]);
 
                 reader = new IDataReaderWrapper(cmd.ExecuteReader(CommandBehavior.SingleResult));
 
@@ -643,15 +613,16 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
 
         }
+
         public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("select count(*) as _row_count_ from ").Append(ProcessTableName(table.SourceName));
+                .Append("SELECT COUNT(*) AS \"_ROW_COUNT_\" FROM ").Append(ProcessTableName(table.SourceName));
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
-                if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
-                    sb.Append(" where");
+                if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
+                    sb.Append(" WHERE");
                 sb.Append($" {table.WhereSQL}");
             }
 
@@ -670,7 +641,6 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 }
             else
                 return false;
-
         }
 
         private bool QueryMaxKey(string sql, Dictionary<string, object> parms, out object value)
@@ -694,63 +664,61 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             return false;
         }
 
-        public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms,
-            out IDataWrapper reader)
+        public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms, out IDataWrapper reader)
         {
             StringBuilder sb = new StringBuilder();
-            string tableName = ProcessTableName(table.SourceName);
 
-            // 语法格式形如：
-            // select <fieldsSQL> from <tableName> {where <whereSQL>}
-            // {order by <orderSQL>} limit <toRow - fromRow + 1> offset <fromRow - 1>
-            //
-            // 如果存在主键，可以优化为：
-            // select <A.fieldsSQL> from <tableName> A join (select <keyFields> from <tableName> {where <whereSQL>}
-            // {order by <orderSQL>} limit <toRow - fromRow + 1> offset <fromRow - 1>) B on <A.keyFields> = <B.keyFields>
-            //
-            // 如果主键字段只有一个，可以进一步优化为：
-            // select <fieldsSQL> from <tableName> {where {<keyField> > @LastMaxKey} {and {<whereSQL>}}
-            // order by <keyField> asc limit <toRow - fromRow + 1>
+            // 如果主键字段只有一个：
+            // SELECT <fieldsSQL> FROM <tableName> WHERE ROWNUM <= <toRow - fromRow + 1>
+            // { AND <keyField> > @LastMaxKey}{ AND {<whereSQL>}} ORDER BY <keyField> ASC
             // 其中
-            // @LastMaxKey = select max(<keyField>) as "_MaxKey_" from (select <keyField> from <tableName>
-            // {where {<keyField> > @LastMaxKey} {and {<whereSQL>}}} order by <keyField> asc
-            // limit <toRow - fromRow + 1>) A
+            // @LastMaxKey = SELECT MAX(<keyField>) AS "_MaxKey_" FROM (
+            // SELECT <keyField> FROM <tableName> WHERE ROWNUM <= <toRow - fromRow + 1>
+            // { AND <keyField> > @LastMaxKey}{ AND {<whereSQL>}} ORDER BY <keyField> ASC
             if (table.KeyFields.Length == 1)
             {
+                string tableName = ProcessTableName(table.SourceName);
                 string keyField = ProcessFieldName(table.KeyFields[0]);
-                string keyFieldWithPrefix = ProcessFieldName(table.KeyFields[0], tableName);
+                string keyFieldWithPrefix = ProcessFieldName(table.KeyFields[0], ProcessTableName(table.SourceName));
 
                 // 查询最大键值
-                sb.Append($"select max({keyField}) as \"_MaxKey_\" from (select {keyFieldWithPrefix} from {tableName}");
+                sb.Append($"SELECT MAX({keyField}) AS \"_MaxKey_\" FROM (")
+                    .Append($"SELECT {keyFieldWithPrefix} FROM {tableName}");
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
-                    if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
-                        sb.Append(" where");
+                    if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" WHERE");
                     sb.Append(" ").Append(table.WhereSQL);
                     if (parms.ContainsKey("LastMaxKey"))
-                        sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
+                        sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
+                    sb.Append(" AND");
                 }
                 else if (parms.ContainsKey("LastMaxKey"))
-                    sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
-                sb.Append($" order by {keyField} limit {toRow - fromRow + 1}) A");
+                    sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey AND");
+                else
+                    sb.Append(" WHERE");
+                sb.Append($" ROWNUM <= {toRow - fromRow + 1} ORDER BY {keyFieldWithPrefix} ASC) A");
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, tableName);
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
 
                     sb.Length = 0;
-                    sb.Append($"select {fieldsSQL} from {tableName}");
+                    sb.Append($"SELECT {fieldsSQL} FROM {tableName}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
-                        if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
-                            sb.Append(" where");
+                        if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
+                            sb.Append(" WHERE");
                         sb.Append(" ").Append(table.WhereSQL);
                         if (parms.ContainsKey("LastMaxKey"))
-                            sb.Append($" and {keyFieldWithPrefix} > @LastMaxKey");
+                            sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
+                        sb.Append(" AND");
                     }
                     else if (parms.ContainsKey("LastMaxKey"))
-                        sb.Append($" where {keyFieldWithPrefix} > @LastMaxKey");
-                    sb.Append($" order by {keyField} limit {toRow - fromRow + 1}");
+                        sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey AND");
+                    else
+                        sb.Append(" WHERE");
+                    sb.Append($" ROWNUM <= {toRow - fromRow + 1} ORDER BY {keyFieldWithPrefix} ASC");
 
                     bool rst = Query(sb.ToString(), parms, out reader);
 
@@ -765,45 +733,59 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     return false;
                 }
             }
+            // 如果存在复合主键：
+            // SELECT <B.fieldsSQL> FROM <tableName> B JOIN (SELECT <keyFields> FROM
+            // (SELECT <keyFields>, ROW_NUMBER() OVER (ORDER BY <orderSQL>) AS "_RowNum_"
+            // FROM <tableName>
+            // {WHERE <whereSQL>}
+            // ) A WHERE "_RowNum_" BETWEEN <fromRow> AND <toRow>) A ON <B.keyFields> = <A.keyFields>
+            else if (table.KeyFields.Length > 1)
+            {
+                string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
+                string tableName = ProcessTableName(table.SourceName);
+                string tableNameWithB = ProcessTableName(table.SourceName, "B");
+                string keyFields = ProcessFieldNames(table.KeyFields);
+                string keyFieldsWithAlias = ProcessFieldNames(table.KeyFields, ProcessTableName(table.SourceName));
+                string keyField = ProcessFieldName(table.KeyFields[0]);
+
+                sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT {keyFields} FROM")
+                    .Append($" (SELECT {keyFieldsWithAlias}, ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
+                    .Append($" AS \"_RowNum_\" FROM {tableName}");
+                if (!string.IsNullOrEmpty(table.WhereSQL))
+                {
+                    if (table.WhereSQL.IndexOf(" WEHRE ", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" WHERE");
+                    sb.Append($" {table.WhereSQL}");
+                }
+                sb.Append($") A WHERE A.\"_RowNum_\" BETWEEN {fromRow} AND {toRow}) A ON B.{keyField} = A.{keyField}");
+                for (int i = 1; i < table.KeyFields.Length; i++)
+                {
+                    keyField = ProcessFieldName(table.KeyFields[i]);
+                    sb.Append($" AND B.{keyField} = A.{keyField}");
+                }
+
+                return Query(sb.ToString(), parms, out reader);
+            }
             else
             {
-                if (table.KeyFields.Length > 0)
-                {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, "A");
-                    string keyField = ProcessFieldName(table.KeyFields[0]);
-                    string keyFields = ProcessFieldNames(table.KeyFields, tableName);
+                // 语法格式形如：
+                // SELECT <fieldsSQL> FROM (SELECT ROW_NUMBER() OVER (ORDER BY <orderSQL>)
+                // AS "_RowNum_", <fieldsSQL> FROM <tableName>
+                // {WHERE <whereSQL>}
+                // ) A WHERE A."_RowNum_" BETWEEN <fromRow> AND <toRow>
+                // ORDER BY <orderSQL> -- 如果添加排序，则性能将受影响
+                string fieldsSQL = ProcessFieldNames(table.SourceFields);
+                string fieldsWithAlias = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
 
-                    sb.Append($"select {fieldsSQL} from {tableName} A join (select {keyFields} from {tableName}");
-                    if (!string.IsNullOrEmpty(table.WhereSQL))
-                    {
-                        if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
-                            sb.Append(" where");
-                        sb.Append($" {table.WhereSQL}");
-                    }
-                    if (!string.IsNullOrEmpty(table.OrderSQL))
-                        sb.Append(" order by ").Append(table.OrderSQL);
-                    sb.Append($" limit {toRow - fromRow + 1} offset {fromRow - 1}) B on A.{keyField} = B.{keyField}");
-                    for (int i = 1; i < table.KeyFields.Length; i++)
-                    {
-                        keyField = ProcessFieldName(table.KeyFields[i]);
-                        sb.Append($" and A.{keyField} = B.{keyField}");
-                    }
-                }
-                else
+                sb.Append($"SELECT {fieldsSQL} FROM (SELECT ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
+                    .Append($" AS \"_RowNum_\", {fieldsWithAlias} FROM {ProcessTableName(table.SourceName)}");
+                if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, tableName);
-
-                    sb.Append($"select {fieldsSQL} from {tableName}");
-                    if (!string.IsNullOrEmpty(table.WhereSQL))
-                    {
-                        if (table.WhereSQL.IndexOf(" where ", StringComparison.OrdinalIgnoreCase) < 0)
-                            sb.Append(" where");
-                        sb.Append($" {table.WhereSQL}");
-                    }
-                    if (!string.IsNullOrEmpty(table.OrderSQL))
-                        sb.Append(" order by ").Append(table.OrderSQL);
-                    sb.Append($" limit {toRow - fromRow + 1} offset {fromRow - 1}");
+                    if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
+                        sb.Append(" WHERE");
+                    sb.Append($" {table.WhereSQL}");
                 }
+                sb.Append($") A WHERE A.\"_RowNum_\" BETWEEN {fromRow} AND {toRow}");
 
                 return Query(sb.ToString(), parms, out reader);
             }
@@ -839,8 +821,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         {
             try
             {
-                trans.RollbackAsync(); // 异步回滚
-                isRollback = true;
+                trans.Rollback();
 
                 return true;
             }
@@ -864,14 +845,5 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
     internal class TableFK : TableInfo
     {
         public List<string> FKs { get; } = new List<string>(); // 外键指向表
-    }
-
-    /// <summary>
-    /// 基于更新和插入 SQL 的更新数据脚本对象
-    /// </summary>
-    internal class UpdateScript
-    {
-        public string UpdateSQL { get; set; } // 更新 SQL
-        public string InsertSQL { get; set; } // 插入 SQL
     }
 }

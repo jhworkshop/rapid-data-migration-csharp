@@ -108,14 +108,6 @@ namespace JHWork.DataMigration.DBMS.MySQL
     }
 
     /// <summary>
-    /// 表外键信息
-    /// </summary>
-    internal class TableFK : TableInfo
-    {
-        public List<string> FKs { get; } = new List<string>(); // 外键指向表
-    }
-
-    /// <summary>
     /// MySQL
     /// </summary>
     public class MySQL : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
@@ -125,6 +117,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
         private string errMsg = "";
         private string title = "MySQL";
         private string dbName = "";
+        private bool isRollback = false;
         private bool isSupportCSV = false;
 
         public bool BeginTransaction()
@@ -132,6 +125,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             try
             {
                 trans = conn.BeginTransaction();
+                isRollback = false;
 
                 return true;
             }
@@ -369,7 +363,13 @@ namespace JHWork.DataMigration.DBMS.MySQL
         {
             try
             {
-                conn = null; // 为适应异步回滚，此处只做引用数清零
+                if (isRollback)
+                    conn = null; // 为适应异步回滚，此处只做引用数清零
+                else
+                {
+                    conn.Close();
+                    conn = null;
+                }
             }
             catch { }
         }
@@ -405,11 +405,13 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             try
             {
-                conn = new MySqlConnection();
-                conn.Close();
-                conn.ConnectionString = $"Data Source={db.Server};Port={db.Port};Initial Catalog={db.DB}"
-                    + $";User ID={db.User};Password={db.Pwd};CharSet={db.CharSet};Pooling=false"
-                    + $";Persist Security Info=True;allowLoadLocalInfile=true;SSL Mode={encrypt};Compress={compress}";
+                if (conn != null) conn.Close();
+                conn = new MySqlConnection
+                {
+                    ConnectionString = $"Data Source={db.Server};Port={db.Port};Initial Catalog={db.DB}"
+                        + $";User ID={db.User};Password={db.Pwd};CharSet={db.CharSet};Pooling=false"
+                        + $";Persist Security Info=True;allowLoadLocalInfile=true;SSL Mode={encrypt};Compress={compress}"
+                };
                 conn.Open();
                 isSupportCSV = GetSupportCSV();
 
@@ -621,7 +623,6 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     {
                         data.Close();
                     }
-
                 }
 
                 fk.KeyFields = keys.ToArray();
@@ -871,14 +872,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 try
                 {
                     if (data.Read())
-                    {
-                        object o = data.GetValue(0);
-
-                        if (o.GetType() == typeof(long))
-                            count = (ulong)(long)o;
-                        else
-                            count = (ulong)(int)o;
-                    }
+                        count = ulong.Parse(data.GetValue(0).ToString());
 
                     return true;
                 }
@@ -1057,6 +1051,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             try
             {
                 trans.RollbackAsync(); // 异步回滚
+                isRollback = true;
 
                 return true;
             }
@@ -1072,5 +1067,13 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 trans = null;
             }
         }
+    }
+
+    /// <summary>
+    /// 表外键信息
+    /// </summary>
+    internal class TableFK : TableInfo
+    {
+        public List<string> FKs { get; } = new List<string>(); // 外键指向表
     }
 }

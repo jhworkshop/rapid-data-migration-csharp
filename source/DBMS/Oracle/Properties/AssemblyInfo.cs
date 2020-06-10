@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // 有关程序集的一般信息由以下
 // 控制。更改这些特性值可修改
 // 与程序集关联的信息。
-[assembly: AssemblyTitle("数据迁移数据库 MySQL 实现")]
+[assembly: AssemblyTitle("数据迁移数据库 Oracle 实现")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("jhworkshop")]
-[assembly: AssemblyProduct("数据迁移数据库 MySQL 实现")]
+[assembly: AssemblyProduct("数据迁移数据库 Oracle 实现")]
 [assembly: AssemblyCopyright("Copyright © jhworkshop 2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // 如果此项目向 COM 公开，则下列 GUID 用于类型库的 ID
-[assembly: Guid("e8da2dbd-f410-4ac3-88de-2698b9c9a622")]
+[assembly: Guid("b3291f40-affe-4f78-96bf-a1478ef0f038")]
 
 // 程序集的版本信息由下列四个值组成: 
 //
