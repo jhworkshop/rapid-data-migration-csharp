@@ -47,24 +47,26 @@ namespace JHWork.DataMigration.Common
                 string[] files = Directory.GetFiles(basePath, "*.dll", SearchOption.TopDirectoryOnly);
 
                 foreach (string file in files)
-                    try
-                    {
-                        Assembly asm = Assembly.LoadFrom(file);
+                    if (!BlackList.Contains(file))
+                        try
+                        {
+                            Assembly asm = Assembly.LoadFrom(file);
 
-                        foreach (Type t in asm.ExportedTypes)
-                            if (t.GetInterface("IAssemblyLoader") != null && t.GetInterface(intfName) != null)
-                                if (asm.CreateInstance(t.FullName, true) is IAssemblyLoader loader)
-                                    lst.Add(loader.GetName().ToLower(),
-                                        new AssemblyInfo() {
-                                            Asm = asm,
-                                            Name = t.FullName,
-                                            DisplayName = loader.GetName()
-                                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.WriteLogExcept($"AssemblyLoader({file})", ex);
-                    }
+                            foreach (Type t in asm.ExportedTypes)
+                                if (t.GetInterface("IAssemblyLoader") != null && t.GetInterface(intfName) != null)
+                                    if (asm.CreateInstance(t.FullName, true) is IAssemblyLoader loader)
+                                        lst.Add(loader.GetName().ToLower(),
+                                            new AssemblyInfo() {
+                                                Asm = asm,
+                                                Name = t.FullName,
+                                                DisplayName = loader.GetName()
+                                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            BlackList.Add(file);
+                            Logger.WriteLogExcept($"AssemblyLoader({file})", ex);
+                        }
             }
         }
 
@@ -100,6 +102,24 @@ namespace JHWork.DataMigration.Common
                 names.Add(info.DisplayName);
 
             return names.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// 黑名单：同一个文件夹可能扫描多次，加载不成功的文件放进黑名单，不再试图加载
+    /// </summary>
+    internal static class BlackList
+    {
+        private static readonly List<string> lst = new List<string>();
+
+        public static void Add(string s)
+        {
+            lst.Add(s);
+        }
+
+        public static bool Contains(string s)
+        {
+            return lst.Contains(s);
         }
     }
 }

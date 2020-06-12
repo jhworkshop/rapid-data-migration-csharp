@@ -65,6 +65,7 @@
 
 | 数据库 | 测试版本 | 读 | 写 | 配置 |
 | ------ | -------- | :--: | :--: | :--: |
+| DB2 | 11.5 | √ | √ | √ |
 | Microsoft SQL Server | 13.0(2016) | √ | √ | √ |
 | MySQL | 5.7.29 | √ | √ | √ |
 | Oracle | 11g | √ | √ | √ |
@@ -84,11 +85,11 @@
 | 1.0 | 2020/4/2 | 全接口化，支持迁移和汇集模式，支持 MSSQL、MySQL和PostgreSQL |
 | 1.1 | 2020/4/14 | 优化并行任务调度算法  |
 | 1.2 | 2020/5/25 | 增加脱敏模式  |
+| 1.2 | 2020/6/10 | 支持 Oracle  |
+| 1.2 | 2020/6/12 | 支持 DB2  |
 
 ## 六、感谢
 感谢我们的老朋友 [Thomas](https://github.com/gztomash) 贡献了大部分实现代码。
-
-感谢 [MySqlConnector](https://mysqlconnector.net/)、[Npgsql](https://www.npgsql.org/)、[Newtonsoft.Json](https://www.newtonsoft.com/json) 等等项目，没有它们，本项目不可能推进得如此顺利。
 
 ## 写在最后
 这是一个实验性项目，实现了一种解决思路，虽然完成度颇高，应用仍须谨慎。

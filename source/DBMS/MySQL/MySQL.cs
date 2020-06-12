@@ -149,7 +149,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                         BuildScriptWithCSV(table, data, filter, out script);
                     else
                         BuildScriptWithInsertSQL(table, table.DestName, data, filter, out script);
-                else if (table.UseReplace)
+                else if (!isSupportCSV)
                     BuildScriptWithReplaceSQL(table, table.DestName, data, filter, out script);
                 else
                     BuildScriptWithMergeSQL(table, data, filter, out script);

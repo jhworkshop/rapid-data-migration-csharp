@@ -2,6 +2,7 @@
 
 | 文件/文件夹 | 数据库 | 读 | 写 | 配置 |
 | ------ | -------- | :--: | :--: | :--: |
+| DB2 | DB2 | √ | √ | √ |
 | MSSQL | Microsoft SQL Server | √ | √ | √ |
 | MySQL | MySQL | √ | √ | √ |
 | Oracle | Oracle | √ | √ | √ |

@@ -119,7 +119,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"[{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}]";
+            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
 
             BuildScriptWithDataTable(table, data, filter, out script);
 
@@ -134,7 +135,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 sb.Append($", {field} = B.{field}");
             }
             field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append($" FROM {tmpTable} B WHERE {destTable}.{field} = B.{field}");
+            sb.Append($" FROM {processedTmpTable} B WHERE {destTable}.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
@@ -143,19 +144,20 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
             script = new MergeScript()
             {
-                TableName = tmpTable.Substring(1, tmpTable.Length - 2),
-                PrepareSQL = $"SELECT {ProcessFieldNames(table.DestFields)} INTO {tmpTable} FROM {destTable} WHERE 1 = 0",
+                TableName = tmpTable,
+                PrepareSQL = $"SELECT {ProcessFieldNames(table.DestFields)} INTO {processedTmpTable} FROM {destTable} WHERE 1 = 0",
                 Data = ((AppendScript)script).Data,
                 MergeSQL = sb.ToString(),
                 MergeSQL2 = "",
-                CleanSQL = $"DROP TABLE {tmpTable}"
+                CleanSQL = $"DROP TABLE {processedTmpTable}"
             };
         }
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"[{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}]";
+            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
             string mergeSQL, mergeSQL2;
 
             BuildScriptWithDataTable(table, data, filter, out script);
@@ -166,7 +168,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
                 string field = ProcessFieldName(table.KeyFields[0]);
 
-                sb.Append($"MERGE INTO {destTable} A USING {tmpTable} B ON A.{field} = B.{field}");
+                sb.Append($"MERGE INTO {destTable} A USING {processedTmpTable} B ON A.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     field = ProcessFieldName(table.KeyFields[i]);
@@ -200,7 +202,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     sb.Append($", {field} = B.{field}");
                 }
                 field = ProcessFieldName(table.KeyFields[0]);
-                sb.Append($" FROM {tmpTable} B WHERE {destTable}.{field} = B.{field}");
+                sb.Append($" FROM {processedTmpTable} B WHERE {destTable}.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     field = ProcessFieldName(table.KeyFields[i]);
@@ -213,7 +215,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 sb.Length = 0;
                 field = ProcessFieldName(table.KeyFields[0]);
                 sb.Append($"INSERT INTO {destTable} ({ProcessFieldNames(fields)}) SELECT")
-                    .Append($" {ProcessFieldNames(fields, "A")} FROM {tmpTable} A LEFT JOIN {destTable} B ON")
+                    .Append($" {ProcessFieldNames(fields, "A")} FROM {processedTmpTable} A LEFT JOIN {destTable} B ON")
                     .Append($"A.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
@@ -227,12 +229,12 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
             script = new MergeScript()
             {
-                TableName = tmpTable.Substring(1, tmpTable.Length - 2),
-                PrepareSQL = $"SELECT * INTO {tmpTable} FROM {destTable} WHERE 1 = 0",
+                TableName = tmpTable,
+                PrepareSQL = $"SELECT * INTO {processedTmpTable} FROM {destTable} WHERE 1 = 0",
                 Data = ((AppendScript)script).Data,
                 MergeSQL = mergeSQL,
                 MergeSQL2 = mergeSQL2,
-                CleanSQL = $"DROP TABLE {tmpTable}"
+                CleanSQL = $"DROP TABLE {processedTmpTable}"
             };
         }
 
@@ -408,15 +410,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                         {
                             Execute(ms.CleanSQL, null, out _);
                         }
-                }
-                else if (script is UpdateScript sql)
-                {
-                    if (Execute(sql.UpdateSQL, null, out count))
-                        if (count == 0)
-                            return Execute(sql.InsertSQL, null, out count);
-                        else
-                            return true;
-
                 }
                 else if (script is string s)
                     return Execute(s, null, out count);
@@ -839,7 +832,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // AS '_RowNum_', <fieldsSQL> FROM <tableName>
                 // {WHERE <whereSQL>}
                 // ) A WHERE A.[_RowNum_] BETWEEN <fromRow> AND <toRow>
-                // ORDER BY <orderSQL> -- 如果添加排序，则性能将受影响
                 //
                 // 如果存在主键，可以优化为：
                 // SELECT <B.fieldsSQL> FROM <tableName> B JOIN (SELECT <keyFields> FROM
@@ -898,7 +890,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // <tableName.keyFields> = <B.keyFields>
                 // WHERE <B.keyFields[0]> IS NULL
                 // {AND <whereSQL>}
-                // ORDER BY <orderSQL>
                 string tableName = ProcessTableName(table.SourceName);
                 string tableNameWith = ProcessTableName(table.SourceName, with);
                 string fieldsSQL = ProcessFieldNames(table.SourceFields, tableName);
@@ -927,7 +918,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 }
                 else
                     sb.Append($" WHERE B.{keyField} IS NULL");
-                sb.Append($" ORDER BY {table.OrderSQL}");
             }
 
             return Query(sb.ToString(), parms, out reader);
@@ -987,14 +977,5 @@ namespace JHWork.DataMigration.DBMS.MSSQL
     internal class TableFK : TableInfo
     {
         public List<string> FKs { get; } = new List<string>(); // 外键指向表
-    }
-
-    /// <summary>
-    /// 基于更新和插入 SQL 的更新数据脚本对象
-    /// </summary>
-    internal class UpdateScript
-    {
-        public string UpdateSQL { get; set; } // 更新 SQL
-        public string InsertSQL { get; set; } // 插入 SQL
     }
 }

@@ -149,10 +149,7 @@ namespace JHWork.DataMigration.Runner.Integration
                     KeyFields = o["keyFields"].ToString().Split(','),
                     SkipFields = o["skipFields"].ToString().Split(','),
                     Filter = o["filter"].ToString(),
-                    KeepIdentity = o.ContainsKey("dest.mssql.keepIdentity") ?
-                        int.Parse(o["dest.mssql.keepIdentity"].ToString()) != 0 : true,
-                    UseReplace = o.ContainsKey("dest.mysql.useReplace") ?
-                        int.Parse(o["dest.mysql.useReplace"].ToString()) != 0 : false,
+                    KeepIdentity = false,
                     DestFields = new string[] { },
                     References = o.ContainsKey("references") ? o["references"].ToString().Split(',') : new string[] { },
                     Total = 0,

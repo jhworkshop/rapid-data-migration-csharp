@@ -1,33 +1,21 @@
-﻿using JHWork.DataMigration.Common;
-using Oracle.ManagedDataAccess.Client;
+﻿using IBM.Data.DB2;
+using JHWork.DataMigration.Common;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Text;
 
-namespace JHWork.DataMigration.DBMS.Oracle
+namespace DB2
 {
     /// <summary>
-    /// 基于合并算法的更新数据脚本对象
+    /// DB2
     /// </summary>
-    internal class MergeScript
+    public class DB2 : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
-        public string PrepareSQL { get; set; } // 准备 SQL（创建临表）
-        public string InsertSQL { get; set; }  // 数据
-        public string MergeSQL { get; set; }   // 更新 SQL
-        public string CleanSQL { get; set; }   // 清理 SQL
-        public string CleanSQL2 { get; set; }  // 清理 SQL 2
-    }
-
-    /// <summary>
-    /// Oracle
-    /// </summary>
-    public class Oracle : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
-    {
-        private readonly OracleConnection conn = new OracleConnection();
-        private OracleTransaction trans = null;
+        private readonly DB2Connection conn = new DB2Connection();
+        private DB2Transaction trans = null;
         private string errMsg = "";
-        private string title = "Oracle";
+        private string title = "DB2";
         private string schema = "";
 
         public bool BeginTransaction()
@@ -49,6 +37,7 @@ namespace JHWork.DataMigration.DBMS.Oracle
 
         public bool BuildScript(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
+            // DB2BulkCopy 不支持事务，只能使用脚本模式
             if (data.Read())
             {
                 if (table is MaskingTable)
@@ -73,13 +62,12 @@ namespace JHWork.DataMigration.DBMS.Oracle
         {
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
-            string fieldsSQL = ProcessFieldNames(fields);
-            string tableSQL = ProcessTableName(tableName);
 
             data.MapFields(fields);
 
-            sb.Append("INSERT ALL").AppendLine().Append($"INTO {tableSQL} ({fieldsSQL}) VALUES (")
-                .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+            sb.Append($"INSERT INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+                .AppendLine().Append("VALUES").AppendLine()
+                .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)
                 sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
             sb.Append(")");
@@ -88,13 +76,11 @@ namespace JHWork.DataMigration.DBMS.Oracle
             while (r < table.PageSize && data.Read())
             {
                 r++;
-                sb.AppendLine().Append($"INTO {tableSQL} ({fieldsSQL}) VALUES (")
-                    .Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+                sb.Append(",").AppendLine().Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
                 for (int i = 1; i < fields.Length; i++)
                     sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
                 sb.Append(")");
             }
-            sb.AppendLine().Append("SELECT * FROM DUAL");
 
             script = sb.ToString();
         }
@@ -102,55 +88,53 @@ namespace JHWork.DataMigration.DBMS.Oracle
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = ProcessTableName($"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}");
+            string tmpTable = $"destTable.Substring(1, destTable.Length - 2)_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
-            string field = ProcessFieldName(table.KeyFields[0]);
+            string field = ProcessFieldName(fields[0]);
 
-            sb.Append($"MERGE INTO {destTable} A USING {tmpTable} B ON (A.{field} = B.{field}");
-            for (int i = 1; i < table.KeyFields.Length; i++)
-            {
-                field = ProcessFieldName(table.KeyFields[i]);
-                sb.Append($" AND A.{field} = B.{field}");
-            }
-            sb.Append(")");
-
-            field = ProcessFieldName(fields[0]);
-            sb.AppendLine().Append($" WHEN MATCHED THEN UPDATE SET A.{field} = B.{field}");
+            sb.Append($"UPDATE {destTable} SET {field} = B.{field}");
             for (int i = 1; i < fields.Length; i++)
             {
                 field = ProcessFieldName(fields[i]);
-                sb.Append($", A.{field} = B.{field}");
+                sb.Append($", {field} = B.{field}");
             }
-            sb.Append(";"); // 语句以分号结尾
+            field = ProcessFieldName(table.KeyFields[0]);
+            sb.Append($" FROM {processedTmpTable} B WHERE {destTable}.{field} = B.{field}");
+            for (int i = 1; i < table.KeyFields.Length; i++)
+            {
+                field = ProcessFieldName(table.KeyFields[i]);
+                sb.Append($" AND {destTable}.{field} = B.{field}");
+            }
 
             BuildScriptWithInsertSQL(table, tmpTable, data, filter, out script);
             script = new MergeScript()
             {
-                PrepareSQL = $"CREATE GLOBAL TEMPORARY TABLE {tmpTable} ON COMMIT PRESERVE ROWS AS"
-                    + $" SELECT {ProcessFieldNames(table.DestFields)} FROM {destTable} WHERE 1 = 0",
-                InsertSQL = script as string,
+                TableName = tmpTable,
+                PrepareSQL = $"CREATE TABLE {processedTmpTable} AS"
+                    + $" (SELECT {ProcessFieldNames(table.DestFields)} FROM {destTable} WHERE 1 = 0) WITH NO DATA",
+                InsertSQL = script.ToString(),
                 MergeSQL = sb.ToString(),
-                CleanSQL = $"TRUNCATE TABLE {tmpTable}",
-                CleanSQL2 = $"DROP TABLE {tmpTable}"
+                CleanSQL = $"DROP TABLE {processedTmpTable}"
             };
         }
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName);
-            string tmpTable = ProcessTableName($"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}");
+            string tmpTable = $"destTable.Substring(1, destTable.Length - 2)_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(table.KeyFields[0]);
 
-            sb.Append($"MERGE INTO {destTable} A USING {tmpTable} B ON (A.{field} = B.{field}");
+            sb.Append($"MERGE INTO {destTable} A USING {processedTmpTable} B ON A.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
                 sb.Append($" AND A.{field} = B.{field}");
             }
-            sb.Append(")");
             field = ProcessFieldName(fields[0]);
             sb.AppendLine().Append($" WHEN MATCHED THEN UPDATE SET A.{field} = B.{field}");
             for (int i = 1; i < fields.Length; i++)
@@ -166,11 +150,11 @@ namespace JHWork.DataMigration.DBMS.Oracle
             BuildScriptWithInsertSQL(table, tmpTable, data, filter, out script);
             script = new MergeScript()
             {
-                PrepareSQL = $"CREATE GLOBAL TEMPORARY TABLE {tmpTable} ON COMMIT PRESERVE ROWS AS SELECT * FROM {destTable} WHERE 1 = 0",
-                InsertSQL = script as string,
+                TableName = tmpTable,
+                PrepareSQL = $"CREATE TABLE {processedTmpTable} LIKE {destTable}",
+                InsertSQL = script.ToString(),
                 MergeSQL = sb.ToString(),
-                CleanSQL = $"TRUNCATE TABLE {tmpTable}",
-                CleanSQL2 = $"DROP TABLE {tmpTable}"
+                CleanSQL = $"DROP TABLE {processedTmpTable}"
             };
         }
 
@@ -220,6 +204,7 @@ namespace JHWork.DataMigration.DBMS.Oracle
         {
             title = $"{db.Server}/{db.DB}";
 
+            string security = db.Encrypt ? ";Security=SSL" : "";
             string[] ss = db.DB.Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
 
             if (ss.Length > 1)
@@ -230,12 +215,12 @@ namespace JHWork.DataMigration.DBMS.Oracle
             try
             {
                 conn.Close();
-                conn.ConnectionString = $"Data Source={db.Server}:{db.Port}/{ss[0]};User ID={db.User}"
-                    + $";Password={db.Pwd};Pooling=false;Persist Security Info=True";
+                conn.ConnectionString = $"Server={db.Server}:{db.Port};Database={ss[0]};User ID={db.User}"
+                    + $";Password={db.Pwd};Pooling=false;Persist Security Info=True{security}";
                 conn.Open();
 
                 if (!string.IsNullOrWhiteSpace(schema))
-                    Execute($"ALTER SESSION SET CURRENT_SCHEMA = {schema}", null, out _);
+                    Execute($"SET SCHEMA {schema}", null, out _);
 
                 return true;
             }
@@ -246,6 +231,35 @@ namespace JHWork.DataMigration.DBMS.Oracle
 
                 return false;
             }
+        }
+
+        private bool EnableIdentityInsert(string tableName, bool status)
+        {
+            string sql = $"SELECT COLNAME FROM SYSCAT.COLUMNS WHERE TABNAME = '{tableName}' AND IDENTITY = 'Y'";
+            if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
+
+            if (Query(sql, null, out IDataWrapper data))
+            {
+                try
+                {
+                    while (data.Read())
+                    {
+                        string col = data.GetValue(0).ToString();
+
+                        Execute("ALTER TABLE {ProcessTableName(tableName)}"
+                            + $" ALTER COLUMN {ProcessFieldName(col)} SET GENERATED "
+                            + (status ? "BY DEFAULT" : "ALWAYS"), null, out _);
+                    }
+                }
+                finally
+                {
+                    data.Close();
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         private string[] ExcludeFields(string[] fields, string[] skipFields)
@@ -296,22 +310,45 @@ namespace JHWork.DataMigration.DBMS.Oracle
         public bool ExecScript(Table table, object script, out uint count)
         {
             count = 0;
-            if (script is string sql)
-                return Execute(sql, null, out count);
-            else if (script is MergeScript ms)
+            try
             {
-                if (Execute(ms.PrepareSQL, null, out _))
-                    try
-                    {
-                        if (Execute(ms.InsertSQL, null, out count))
-                            if (Execute(ms.MergeSQL, null, out _))
-                                return true;
-                    }
-                    finally
-                    {
-                        Execute(ms.CleanSQL, null, out _);
-                        Execute(ms.CleanSQL2, null, out _);
-                    }
+                if (script is string s)
+                    return Execute(s, null, out count);
+                else if (script is MergeScript ms)
+                {
+                    if (Execute(ms.PrepareSQL, null, out _))
+                        try
+                        {
+                            if (table.KeepIdentity) EnableIdentityInsert(ms.TableName, true);
+                            try
+                            {
+                                if (!Execute(ms.InsertSQL, null, out count)) return false;
+
+                                if (table.KeepIdentity) EnableIdentityInsert(table.DestName, true);
+                                try
+                                {
+                                    if (Execute(ms.MergeSQL, null, out _)) return true;
+                                }
+                                finally
+                                {
+                                    if (table.KeepIdentity) EnableIdentityInsert(table.DestName, false);
+                                }
+                            }
+                            finally
+                            {
+                                if (table.KeepIdentity) EnableIdentityInsert(ms.TableName, false);
+                            }
+                        }
+                        finally
+                        {
+                            Execute(ms.CleanSQL, null, out _);
+                        }
+                }
+            }
+            catch (Exception ex)
+            {
+                errMsg = $"{table.DestName}：{ex.Message}";
+                Logger.WriteLogExcept(title, ex);
             }
 
             return false;
@@ -321,11 +358,7 @@ namespace JHWork.DataMigration.DBMS.Oracle
         {
             try
             {
-                OracleCommand cmd = new OracleCommand(sql, conn)
-                {
-                    CommandType = CommandType.Text,
-                    Transaction = trans
-                };
+                DB2Command cmd = new DB2Command(sql, conn, trans);
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -389,7 +422,7 @@ namespace JHWork.DataMigration.DBMS.Oracle
 
         public string GetName()
         {
-            return "Oracle";
+            return "DB2";
         }
 
         public bool GetTables(IProgress progress, List<TableInfo> lst)
@@ -398,10 +431,10 @@ namespace JHWork.DataMigration.DBMS.Oracle
             int total = 0, position = 0;
 
             // 获取所有用户表清单
-            string sql = "SELECT TABLE_NAME FROM ALL_ALL_TABLES";
+            string sql = "SELECT TABNAME FROM SYSCAT.TABLES WHERE TYPE = 'T'";
 
-            if (!string.IsNullOrWhiteSpace(schema)) sql += $" WHERE OWNER = '{schema}'";
-            if (Query(sql + " ORDER BY TABLE_NAME ASC", null, out IDataWrapper data))
+            if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
+            if (Query(sql + " ORDER BY TABNAME ASC", null, out IDataWrapper data))
                 try
                 {
                     while (data.Read())
@@ -419,11 +452,9 @@ namespace JHWork.DataMigration.DBMS.Oracle
             {
                 List<string> keys = new List<string>();
 
-                sql = "SELECT A.COLUMN_NAME FROM ALL_CONS_COLUMNS A JOIN ALL_CONSTRAINTS B"
-                    + " ON A.CONSTRAINT_NAME = B.CONSTRAINT_NAME AND B.CONSTRAINT_TYPE = 'P'"
-                    + $" AND B.TABLE_NAME = '{fk.Name}'";
-                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND B.OWNER = '{schema}'";
-                if (Query(sql + " ORDER BY A.COLUMN_NAME ASC", null, out data))
+                sql = $"SELECT COLNAME FROM SYSCAT.COLUMNS WHERE TABNAME = '{fk.Name}' AND KEYSEQ = 1";
+                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
+                if (Query(sql + " ORDER BY COLNAME ASC", null, out data))
                 {
                     try
                     {
@@ -442,10 +473,8 @@ namespace JHWork.DataMigration.DBMS.Oracle
             // 获取每个表的外键指向的表清单
             foreach (TableFK fk in fks)
             {
-                sql = "SELECT A.TABLE_NAME FROM ALL_CONSTRAINTS A JOIN ALL_CONSTRAINTS B"
-                    + " ON A.CONSTRAINT_NAME = B.R_CONSTRAINT_NAME AND B.CONSTRAINT_TYPE = 'R'"
-                    + $" AND B.TABLE_NAME = '{fk.Name}'";
-                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND B.OWNER = '{schema}'";
+                sql = $"SELECT REFTABNAME FROM SYSCAT.REFERENCES WHERE TABNAME = '{fk.Name}'";
+                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
                 if (Query(sql, null, out data))
                 {
                     try
@@ -592,11 +621,7 @@ namespace JHWork.DataMigration.DBMS.Oracle
         {
             try
             {
-                OracleCommand cmd = new OracleCommand(sql, conn)
-                {
-                    CommandType = CommandType.Text,
-                    Transaction = trans
-                };
+                DB2Command cmd = new DB2Command(sql, conn, trans);
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -647,103 +672,17 @@ namespace JHWork.DataMigration.DBMS.Oracle
                 return false;
         }
 
-        private bool QueryMaxKey(string sql, Dictionary<string, object> parms, out object value)
-        {
-            if (Query(sql, parms, out IDataWrapper data))
-                try
-                {
-                    if (data.Read())
-                    {
-                        value = data.GetValue(0);
-
-                        return true;
-                    }
-                }
-                finally
-                {
-                    data.Close();
-                }
-
-            value = null;
-            return false;
-        }
-
         public bool QueryPage(Table table, uint fromRow, uint toRow, WithEnums with, Dictionary<string, object> parms, out IDataWrapper reader)
         {
             StringBuilder sb = new StringBuilder();
 
-            // 如果主键字段只有一个：
-            // SELECT <fieldsSQL> FROM <tableName> WHERE ROWNUM <= <toRow - fromRow + 1>
-            // { AND <keyField> > @LastMaxKey}{ AND {<whereSQL>}} ORDER BY <keyField> ASC
-            // 其中
-            // @LastMaxKey = SELECT MAX(<keyField>) AS "_MaxKey_" FROM (
-            // SELECT <keyField> FROM <tableName> WHERE ROWNUM <= <toRow - fromRow + 1>
-            // { AND <keyField> > @LastMaxKey}{ AND {<whereSQL>}} ORDER BY <keyField> ASC
-            if (table.KeyFields.Length == 1)
-            {
-                string tableName = ProcessTableName(table.SourceName);
-                string keyField = ProcessFieldName(table.KeyFields[0]);
-                string keyFieldWithPrefix = ProcessFieldName(table.KeyFields[0], ProcessTableName(table.SourceName));
-
-                // 查询最大键值
-                sb.Append($"SELECT MAX({keyField}) AS \"_MaxKey_\" FROM (")
-                    .Append($"SELECT {keyFieldWithPrefix} FROM {tableName}");
-                if (!string.IsNullOrEmpty(table.WhereSQL))
-                {
-                    if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
-                        sb.Append(" WHERE");
-                    sb.Append(" ").Append(table.WhereSQL);
-                    if (parms.ContainsKey("LastMaxKey"))
-                        sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
-                    sb.Append(" AND");
-                }
-                else if (parms.ContainsKey("LastMaxKey"))
-                    sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey AND");
-                else
-                    sb.Append(" WHERE");
-                sb.Append($" ROWNUM <= {toRow - fromRow + 1} ORDER BY {keyFieldWithPrefix} ASC) A");
-
-                if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
-                {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
-
-                    sb.Length = 0;
-                    sb.Append($"SELECT {fieldsSQL} FROM {tableName}");
-                    if (!string.IsNullOrEmpty(table.WhereSQL))
-                    {
-                        if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
-                            sb.Append(" WHERE");
-                        sb.Append(" ").Append(table.WhereSQL);
-                        if (parms.ContainsKey("LastMaxKey"))
-                            sb.Append($" AND {keyFieldWithPrefix} > @LastMaxKey");
-                        sb.Append(" AND");
-                    }
-                    else if (parms.ContainsKey("LastMaxKey"))
-                        sb.Append($" WHERE {keyFieldWithPrefix} > @LastMaxKey AND");
-                    else
-                        sb.Append(" WHERE");
-                    sb.Append($" ROWNUM <= {toRow - fromRow + 1} ORDER BY {keyFieldWithPrefix} ASC");
-
-                    bool rst = Query(sb.ToString(), parms, out reader);
-
-                    parms["LastMaxKey"] = maxValue;
-
-                    return rst;
-                }
-                else
-                {
-                    reader = null;
-
-                    return false;
-                }
-            }
-            // 如果存在复合主键：
+            // 如果存在主键：
             // SELECT <B.fieldsSQL> FROM <tableName> B JOIN (SELECT <keyFields> FROM
             // (SELECT <keyFields>, ROW_NUMBER() OVER (ORDER BY <orderSQL>) AS "_RowNum_"
             // FROM <tableName>
             // {WHERE <whereSQL>}
             // ) A WHERE "_RowNum_" BETWEEN <fromRow> AND <toRow>) A ON <B.keyFields> = <A.keyFields>
-            else if (table.KeyFields.Length > 1)
+            if (table.KeyFields.Length > 0)
             {
                 string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
                 string tableName = ProcessTableName(table.SourceName);
@@ -840,6 +779,18 @@ namespace JHWork.DataMigration.DBMS.Oracle
                 trans = null;
             }
         }
+    }
+
+    /// <summary>
+    /// 基于 MERGE INTO 语法的更新数据脚本对象
+    /// </summary>
+    internal class MergeScript
+    {
+        public string TableName { get; set; }  // 临表名称
+        public string PrepareSQL { get; set; } // 准备 SQL（创建临表）
+        public string InsertSQL { get; set; }  // 数据
+        public string MergeSQL { get; set; }   // 合并 SQL
+        public string CleanSQL { get; set; }   // 清理 SQL
     }
 
     /// <summary>

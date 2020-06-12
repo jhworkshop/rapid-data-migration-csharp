@@ -97,7 +97,6 @@ namespace JHWork.DataMigration.Runner.Masking
                     MaskFields = o["maskFields"].ToString().Split(','),
                     Filter = o["filter"].ToString(),
                     KeepIdentity = false,
-                    UseReplace = false,
                     References = new string[] { },
                     Total = 0,
                     Progress = 0,
