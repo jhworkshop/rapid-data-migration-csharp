@@ -24,13 +24,16 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
     /// <summary>
     /// PostgreSQL
     /// </summary>
-    public class PostgreSQL : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class PostgreSQL : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
         private NpgsqlConnection conn;
         private NpgsqlTransaction trans = null;
-        private string errMsg = "";
-        private string title = "PostgreSQL";
         private bool isRollback = false;
+
+        public PostgreSQL()
+        {
+            LogTitle = GetName();
+        }
 
         public bool BeginTransaction()
         {
@@ -43,8 +46,8 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -111,9 +114,9 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
+            string tmpTable = $"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable, table.DestSchema);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(fields[0]);
@@ -147,9 +150,9 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
+            string tmpTable = $"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable, table.DestSchema);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(fields[0]);
@@ -220,8 +223,8 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -235,8 +238,9 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         {
             string encrypt = db.Encrypt ? "Require" : "Disable";
 
-            title = $"{db.Server}/{db.DB}";
-
+            LogTitle = $"{db.Server}/{db.DB}";
+            Schema = db.Schema;
+            Timeout = db.Timeout;
             try
             {
                 if (conn != null) conn.Close();
@@ -247,65 +251,23 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 };
                 conn.Open();
 
+                if (!string.IsNullOrEmpty(Schema)) Execute($"set search_path to {Schema}", null, out _);
+
                 return true;
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
         }
 
-        private string[] ExcludeFields(string[] fields, string[] skipFields)
-        {
-            if (skipFields == null || skipFields.Length == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>(), skipList = new List<string>();
-
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
-        }
-
-        private string[] ExcludeFields(string[] fields, string[] skipFields, string[] skipFields2)
-        {
-            List<string> skipList = new List<string>();
-
-            if (skipFields != null && skipFields.Length != 0)
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-            if (skipFields2 != null && skipFields2.Length != 0)
-                foreach (string s in skipFields2)
-                    skipList.Add(s.ToLower());
-
-            if (skipList.Count == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>();
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
-        }
 
         public bool ExecScript(Table table, object script, out uint count)
         {
-            return InternalExecScript(table.DestName, script, out count);
+            return InternalExecScript(table.DestName, table.DestSchema, script, out count);
         }
 
         private bool Execute(string sql, Dictionary<string, object> parms, out uint count)
@@ -313,7 +275,11 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             count = 0;
             try
             {
-                NpgsqlCommand cmd = new NpgsqlCommand(sql, conn, trans);
+                NpgsqlCommand cmd = new NpgsqlCommand(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -325,17 +291,27 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
 
                 return false;
             }
         }
 
-        public bool GetFieldNames(string tableName, out string[] fieldNames)
+        private string ExtractTableName(string name)
         {
-            if (Query($"select * from {ProcessTableName(tableName)} where 1 = 0", null, out IDataWrapper data))
+            if (string.IsNullOrEmpty(name)) return "";
+
+            if (name.StartsWith("\"")) name = name.Substring(1);
+            if (name.EndsWith("\"")) name = name.Substring(0, name.Length - 1);
+
+            return name;
+        }
+
+        public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
+        {
+            if (Query($"select * from {ProcessTableName(tableName, schema)} where 1 = 0", null, out IDataWrapper data))
                 try
                 {
                     fieldNames = data.GetFieldNames();
@@ -354,144 +330,54 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        public string GetLastError()
-        {
-            return errMsg;
-        }
-
         public string GetName()
         {
             return "PostgreSQL";
         }
 
-        public bool GetTables(IProgress progress, List<TableInfo> lst)
+        public DBMSParams GetParams()
         {
-            List<TableFK> fks = new List<TableFK>();
-            int total = 0, position = 0;
-
-            // 获取所有用户表清单
-            if (Query("select tablename from pg_tables where schemaname = 'public' order by tablename asc", null,
-                out IDataWrapper data))
-                try
-                {
-                    while (data.Read())
-                        fks.Add(new TableFK() { Name = (string)data.GetValue(0), Order = 0 });
-
-                    total = data.ReadCount * 2;
-                }
-                finally
-                {
-                    data.Close();
-                }
-
-            // 获取每个表的主键字段清单
-            foreach (TableFK fk in fks)
+            return new DBMSParams()
             {
-                List<string> keys = new List<string>();
-
-                if (Query("select C.attname from pg_constraint A join pg_class B on A.conrelid = B.oid "
-                    + "join pg_attribute C on C.attrelid = B.oid and ARRAY_POSITION(A.conkey, C.attnum) > 0 where "
-                    + $"B.relname = '{fk.Name}' and A.contype = 'p' order by C.attname asc", null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) keys.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
-
-                fk.KeyFields = keys.ToArray();
-                progress.OnProgress(total, ++position);
-            }
-
-            // 获取每个表的外键指向的表清单
-            foreach (TableFK fk in fks)
-            {
-                if (Query("select A.relname from pg_class A "
-                    + "join pg_constraint B on B.confrelid = A.oid and B.contype = 'f' "
-                    + $"join pg_class C on C.oid = B.conrelid and C.relname = '{fk.Name}' "
-                    + "order by A.relname asc", null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) fk.FKs.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
-                progress.OnProgress(total, ++position);
-            }
-
-            int order = 100;
-
-            foreach (TableFK fk in fks)
-                if (fk.FKs.Count == 0 || (fk.FKs.Count == 1 && fk.FKs[0].Equals(fk.Name)))
-                    fk.Order = order;
-
-            order += 100;
-            while (order < 10000) // 设定一个级别上限：100 级
-            {
-                int left = 0;
-                List<TableFK> lastList = new List<TableFK>();
-
-                // 创建上一轮次的结果清单
-                foreach (TableFK fk in fks)
-                    if (fk.Order > 0) lastList.Add(fk);
-
-                foreach (TableFK fk in fks)
-                    if (fk.Order == 0)
-                    {
-                        bool done = true;
-
-                        // 检查是否所有外键指向表都在上一轮清单里面
-                        foreach (string s in fk.FKs)
-                        {
-                            bool found = false;
-
-                            foreach (TableFK fk2 in lastList)
-                                if (fk2.Name.Equals(s))
-                                {
-                                    found = true;
-                                    break;
-                                }
-
-                            if (!found)
-                            {
-                                done = false;
-                                break;
-                            }
-                        }
-                        if (done)
-                            fk.Order = order;
-                        else
-                            left++;
-                    }
-
-                if (left == 0) break;
-                order += 100;
-            }
-
-            foreach (TableFK fk in fks)
-                lst.Add(new TableInfo()
-                {
-                    Name = fk.Name,
-                    KeyFields = fk.KeyFields,
-                    Order = fk.Order,
-                    References = fk.FKs.ToArray()
-                });
-
-            lst.Sort(new TableInfoComparer());
-
-            return true;
-
+                CharSet = false,
+                Compress = false
+            };
         }
 
-        private bool InternalExecScript(string table, object script, out uint count)
+        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        {
+            string sql = "select A.relname from pg_class A"
+                + " join pg_constraint B on B.confrelid = A.oid and B.contype = 'f'"
+                + $" join pg_class C on C.oid = B.conrelid and C.relname = '{table}'";
+
+            if (!string.IsNullOrEmpty(Schema))
+                sql += $" join pg_namespace D on D.oid = C.relnamespace and D.nspname = '{Schema}'";
+
+            return Query(sql + " order by A.relname asc", null, out data);
+        }
+
+        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        {
+            string sql = "select C.attname from pg_constraint A"
+                + $" join pg_class B on A.conrelid = B.oid and B.relname = '{table}'"
+                + " join pg_attribute C on C.attrelid = B.oid and ARRAY_POSITION(A.conkey, C.attnum) > 0";
+
+            if (!string.IsNullOrEmpty(Schema))
+                sql += $" join pg_namespace D on D.oid = B.relnamespace and D.nspname = '{Schema}'";
+
+            return Query(sql + " where A.contype = 'p' order by C.attname asc", null, out data);
+        }
+
+        protected override bool GetTables(out IDataWrapper data)
+        {
+            string sql = "select tablename, schemaname from pg_tables";
+
+            if (!string.IsNullOrEmpty(Schema)) sql += $" where schemaname = '{Schema}'";
+
+            return Query(sql + " order by schemaname asc, tablename asc", null, out data);
+        }
+
+        private bool InternalExecScript(string table, string schema, object script, out uint count)
         {
             count = 0;
             try
@@ -499,7 +385,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 if (script is DataTable dt)
                 {
                     using (NpgsqlBinaryImporter writer = conn.BeginBinaryImport(
-                        $"copy {ProcessTableName(table)} from stdin binary"))
+                        $"copy {ProcessTableName(table, schema)} from stdin binary"))
                     {
                         foreach (DataRow row in dt.Rows)
                         {
@@ -529,7 +415,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                     if (Execute(ms.PrepareSQL, null, out _))
                         try
                         {
-                            if (InternalExecScript(ms.TableName, ms.Data, out count))
+                            if (InternalExecScript(ms.TableName, schema, ms.Data, out count))
                                 if (Execute(ms.UpdateSQL, null, out _))
                                     if (string.IsNullOrEmpty(ms.InsertSQL) || Execute(ms.InsertSQL, null, out _))
                                         return true;
@@ -552,8 +438,8 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             catch (Exception ex)
             {
-                errMsg = $"{table}：{ex.Message}";
-                Logger.WriteLogExcept(title, ex);
+                LastError = $"{table}：{ex.Message}";
+                Logger.WriteLogExcept(LogTitle, ex);
             }
 
             return false;
@@ -613,16 +499,39 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
         }
 
-        private string ProcessTableName(string tableName)
+        private string ProcessTableName(string tableName, string schema)
         {
-            return $"\"{tableName}\"";
+            if (string.IsNullOrEmpty(tableName))
+                return "";
+            else
+            {
+                if (!tableName.StartsWith("\""))
+                    tableName = $"\"{tableName}\"";
+
+                if (!string.IsNullOrEmpty(schema))
+                    if (!schema.StartsWith("\""))
+                        tableName = $"\"{schema}\".{tableName}";
+                    else
+                        tableName = $"{schema}.{tableName}";
+                else if (!string.IsNullOrEmpty(Schema))
+                    if (!Schema.StartsWith("\""))
+                        tableName = $"\"{Schema}\".{tableName}";
+                    else
+                        tableName = $"{Schema}.{tableName}";
+
+                return tableName;
+            }
         }
 
         private bool Query(string sql, Dictionary<string, object> parms, out IDataWrapper reader)
         {
             try
             {
-                NpgsqlCommand cmd = new NpgsqlCommand(sql, conn, trans);
+                NpgsqlCommand cmd = new NpgsqlCommand(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -634,9 +543,9 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
                 reader = null;
 
                 return false;
@@ -646,7 +555,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("select count(*) as _row_count_ from ").Append(ProcessTableName(table.SourceName));
+                .Append("select count(*) as _row_count_ from ").Append(ProcessTableName(table.SourceName, table.SourceSchema));
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
@@ -698,7 +607,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             out IDataWrapper reader)
         {
             StringBuilder sb = new StringBuilder();
-            string tableName = ProcessTableName(table.SourceName);
+            string tableName = ProcessTableName(table.SourceName, table.SourceSchema);
 
             // 语法格式形如：
             // select <fieldsSQL> from <tableName> {where <whereSQL>}
@@ -846,8 +755,8 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -856,14 +765,6 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 trans = null;
             }
         }
-    }
-
-    /// <summary>
-    /// 表外键信息
-    /// </summary>
-    internal class TableFK : TableInfo
-    {
-        public List<string> FKs { get; } = new List<string>(); // 外键指向表
     }
 
     /// <summary>

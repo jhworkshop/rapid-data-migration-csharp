@@ -10,17 +10,24 @@
                 "server": "127.0.0.1",
                 "port": 1433,
                 "user": "sa",
+				"schema": "dbo",
                 "password": "",
-                "charset": ""
+                "charset": "",
+				"encrypt": 0,
+				"compress": 0,
+				"timeout": 60
             },
             "dest": {
                 "dbms": "MySQL",
                 "server": "127.0.0.1",
                 "port": 3306,
                 "user": "thomas",
+				"schema": "",
                 "password": "",
-                "charset": "utf8",
-                "compress": 1
+                "charset": "utf8mb4",
+				"encrypt": 0,
+                "compress": 1,
+				"timeout": 60
             },
             "dbs": [
                 "db1"
@@ -59,20 +66,24 @@
         "server": "127.0.0.1", # 服务器地址
         "port": 1433,          # 端口号
         "user": "sa",          # 登录用户名
+		"schema": "dbo",       # 模式
         "password": "",        # 登录密码
         "charset": "",         # 字符集
         "compress": 0,         # 压缩传输，默认 0
-        "encrypt": 0           # 加密传输，默认 0
+        "encrypt": 0,          # 加密传输，默认 0
+		"timeout": 60          # 超时秒数，默认 60
     },
     "dest": {                  # 目标库配置
         "dbms": "MySQL",       # 数据库类型
         "server": "127.0.0.1", # 服务器地址
         "port": 3306,          # 端口号
         "user": "thomas",      # 登录用户名
+		"schema": "",          # 模式
         "password": "",        # 登录密码
         "charset": "utf8",     # 字符集
         "compress": 1，        # 压缩传输，默认 0
-        "encrypt": 0           # 加密传输，默认 0
+        "encrypt": 0,          # 加密传输，默认 0
+		"timeout": 60          # 超时秒数，默认 60
     },
     "dbs": [                   # 数据库列表，源库和目标库名称不同，可用逗号分隔，如 db1,db2
         "db1"
@@ -96,10 +107,12 @@
                 "db3"
             ],
             "user": "sa",          # 登录用户名
+			"schema": "dbo",       # 模式
             "password": "",        # 登录密码
             "charset": "",         # 字符集
             "compress": 0,         # 压缩传输，默认 0
-            "encrypt": 0           # 加密传输，默认 0
+            "encrypt": 0,          # 加密传输，默认 0
+			"timeout": 60          # 超时秒数，默认 60
         }
     ],
     "dest": {                      # 目标库配置
@@ -108,10 +121,12 @@
         "port": 3306,              # 端口号
         "db": "db2",               # 目标库名称
         "user": "thomas",          # 登录用户名
+		"schema": "",              # 模式
         "password": "",            # 登录密码
         "charset": "utf8",         # 字符集
-        "compress": 1，            # 压缩传输，默认 0
-        "encrypt": 0               # 加密传输，默认 0
+        "compress": 1,             # 压缩传输，默认 0
+        "encrypt": 0,              # 加密传输，默认 0
+		"timeout": 60              # 超时秒数，默认 60
     },
     "readPages": 25,               # 每次读取数据页数
     "tables": "Tables.json",       # 数据表配置文件名

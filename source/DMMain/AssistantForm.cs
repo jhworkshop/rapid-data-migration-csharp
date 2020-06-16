@@ -46,8 +46,10 @@ namespace JHWork.DataMigration
                     sourcePort.Text = source.Port.ToString();
                     sourceDB.Text = source.DB;
                     sourceUser.Text = source.User;
+                    sourceSchema.Text = source.Schema;
                     sourcePwd.Text = source.Pwd;
                     sourceCharSet.Text = source.CharSet;
+                    sourceTimeout.Text = source.Timeout.ToString();
                     sourceCompress.Checked = source.Compress;
                     sourceEncrypt.Checked = source.Encrypt;
 
@@ -56,8 +58,10 @@ namespace JHWork.DataMigration
                     destPort.Text = dest.Port.ToString();
                     destDB.Text = dest.DB;
                     destUser.Text = dest.User;
+                    destSchema.Text = dest.Schema;
                     destPwd.Text = dest.Pwd;
                     destCharSet.Text = dest.CharSet;
+                    destTimeout.Text = dest.Timeout.ToString();
                     destCompress.Checked = dest.Compress;
                     destEncrypt.Checked = dest.Encrypt;
 
@@ -98,7 +102,8 @@ namespace JHWork.DataMigration
                     Pwd = sourcePwd.Text,
                     CharSet = sourceCharSet.Text,
                     Compress = sourceCompress.Checked,
-                    Encrypt = sourceEncrypt.Checked
+                    Encrypt = sourceEncrypt.Checked,
+                    Timeout = uint.Parse(sourceTimeout.Text)
                 };
                 Database dest = new Database()
                 {
@@ -110,7 +115,8 @@ namespace JHWork.DataMigration
                     Pwd = destPwd.Text,
                     CharSet = destCharSet.Text,
                     Compress = destCompress.Checked,
-                    Encrypt = destEncrypt.Checked
+                    Encrypt = destEncrypt.Checked,
+                    Timeout = uint.Parse(destTimeout.Text)
                 };
                 List<Table> tables = new List<Table>();
 
@@ -132,6 +138,50 @@ namespace JHWork.DataMigration
                 item.Checked = true;
         }
 
+        private void DBMS_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (sender == sourceDBMS)
+            {
+                IDBMSAssistant source = DBMSFactory.GetDBMSAssistantByName(sourceDBMS.Text);
+
+                if (source != null)
+                {
+                    DBMSParams param = source.GetParams();
+
+                    sourceServer.Enabled = param.Server;
+                    sourcePort.Enabled = param.Port;
+                    sourceDB.Enabled = param.DB;
+                    sourceUser.Enabled = param.User;
+                    sourceSchema.Enabled = param.Schema;
+                    sourcePwd.Enabled = param.Pwd;
+                    sourceCharSet.Enabled = param.CharSet;
+                    sourceTimeout.Enabled = param.Timeout;
+                    sourceEncrypt.Enabled = param.Encrypt;
+                    sourceCompress.Enabled = param.Compress;
+                }
+            }
+            else if (sender == destDBMS)
+            {
+                IDBMSAssistant dest = DBMSFactory.GetDBMSAssistantByName(destDBMS.Text);
+
+                if (dest != null)
+                {
+                    DBMSParams param = dest.GetParams();
+
+                    destServer.Enabled = param.Server;
+                    destPort.Enabled = param.Port;
+                    destDB.Enabled = param.DB;
+                    destUser.Enabled = param.User;
+                    destSchema.Enabled = param.Schema;
+                    destPwd.Enabled = param.Pwd;
+                    destCharSet.Enabled = param.CharSet;
+                    destTimeout.Enabled = param.Timeout;
+                    destEncrypt.Enabled = param.Encrypt;
+                    destCompress.Enabled = param.Compress;
+                }
+            }
+        }
+
         private bool InitDataSource(ref IDBMSAssistant source, ref IDBMSAssistant dest)
         {
             source = DBMSFactory.GetDBMSAssistantByName(sourceDBMS.Text);
@@ -145,10 +195,12 @@ namespace JHWork.DataMigration
                     Port = uint.Parse(sourcePort.Text),
                     DB = sourceDB.Text,
                     User = sourceUser.Text,
+                    Schema = sourceSchema.Text,
                     Pwd = sourcePwd.Text,
                     CharSet = sourceCharSet.Text,
                     Compress = sourceCompress.Checked,
-                    Encrypt = sourceEncrypt.Checked
+                    Encrypt = sourceEncrypt.Checked,
+                    Timeout = uint.Parse(sourceTimeout.Text)
                 };
                 Database dstDB = new Database()
                 {
@@ -157,10 +209,12 @@ namespace JHWork.DataMigration
                     Port = uint.Parse(destPort.Text),
                     DB = destDB.Text,
                     User = destUser.Text,
+                    Schema = destSchema.Text,
                     Pwd = destPwd.Text,
                     CharSet = destCharSet.Text,
                     Compress = destCompress.Checked,
-                    Encrypt = destEncrypt.Checked
+                    Encrypt = destEncrypt.Checked,
+                    Timeout = uint.Parse(destTimeout.Text)
                 };
 
                 return source.Connect(srcDB) && dest.Connect(dstDB);
@@ -218,7 +272,9 @@ namespace JHWork.DataMigration
                     Table table = new Table()
                     {
                         SourceName = "<?>",
+                        SourceSchema = "",
                         DestName = info.Name,
+                        DestSchema = info.Schema,
                         Order = info.Order,
                         PageSize = 100,
                         OrderSQL = info.KeyFields.Length == 0 ? "" : string.Join(" ASC, ", info.KeyFields) + " ASC",
@@ -262,9 +318,9 @@ namespace JHWork.DataMigration
                             break;
                         }
 
-                    ListViewItem item = listView.Items.Add(table.SourceName);
+                    ListViewItem item = listView.Items.Add(table.SourceFullName);
 
-                    item.SubItems.Add(table.DestName);
+                    item.SubItems.Add(table.DestFullName);
                     item.SubItems.Add(table.Order.ToString());
                     item.Checked = found;
                     item.Tag = table;

@@ -32,12 +32,15 @@ namespace JHWork.DataMigration.DBMS.MSSQL
     /// <summary>
     /// Microsoft SQL Server
     /// </summary>
-    public class MSSQL : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class MSSQL : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
         private readonly SqlConnection conn = new SqlConnection();
         private SqlTransaction trans = null;
-        private string errMsg = "";
-        private string title = "MSSQL";
+
+        public MSSQL()
+        {
+            LogTitle = GetName();
+        }
 
         public bool BeginTransaction()
         {
@@ -49,8 +52,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -257,8 +260,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -272,8 +275,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         {
             string encrypt = db.Encrypt ? "true" : "false";
 
-            title = $"{db.Server}/{db.DB}";
-
+            LogTitle = $"{db.Server}/{db.DB}";
+            Timeout = db.Timeout;
             try
             {
                 conn.Close();
@@ -285,8 +288,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -300,51 +303,6 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 .Append($"{ProcessTableName(tableName)} ").Append(status ? "ON" : "OFF");
 
             return Execute(sb.ToString(), null, out _);
-        }
-
-        private string[] ExcludeFields(string[] fields, string[] skipFields)
-        {
-            if (skipFields == null || skipFields.Length == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>(), skipList = new List<string>();
-
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
-        }
-
-        private string[] ExcludeFields(string[] fields, string[] skipFields, string[] skipFields2)
-        {
-            List<string> skipList = new List<string>();
-
-            if (skipFields != null && skipFields.Length != 0)
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-            if (skipFields2 != null && skipFields2.Length != 0)
-                foreach (string s in skipFields2)
-                    skipList.Add(s.ToLower());
-
-            if (skipList.Count == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>();
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
         }
 
         public bool ExecScript(Table table, object script, out uint count)
@@ -416,8 +374,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = $"{table.DestName}：{ex.Message}";
-                Logger.WriteLogExcept(title, ex);
+                LastError = $"{table.DestName}：{ex.Message}";
+                Logger.WriteLogExcept(LogTitle, ex);
             }
 
             return false;
@@ -427,7 +385,11 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         {
             try
             {
-                SqlCommand cmd = new SqlCommand(sql, conn, trans);
+                SqlCommand cmd = new SqlCommand(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -439,16 +401,16 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
                 count = 0;
 
                 return false;
             }
         }
 
-        public bool GetFieldNames(string tableName, out string[] fieldNames)
+        public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
         {
             if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, out IDataWrapper data))
                 try
@@ -468,140 +430,41 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        public string GetLastError()
-        {
-            return errMsg;
-        }
-
         public string GetName()
         {
             return "MSSQL";
         }
 
-        public bool GetTables(IProgress progress, List<TableInfo> lst)
+        public DBMSParams GetParams()
         {
-            List<TableFK> fks = new List<TableFK>();
-            int total = 0, position = 0;
-
-            // 获取所有用户表清单
-            if (Query("SELECT name FROM sysobjects WHERE type = 'U' ORDER BY name ASC", null, out IDataWrapper data))
-                try
-                {
-                    while (data.Read())
-                        fks.Add(new TableFK() { Name = (string)data.GetValue(0), Order = 0 });
-
-                    total = data.ReadCount * 2;
-                }
-                finally
-                {
-                    data.Close();
-                }
-
-            // 获取每个表的主键字段清单
-            foreach (TableFK fk in fks)
+            return new DBMSParams()
             {
-                List<string> keys = new List<string>();
+                CharSet = false,
+                Compress = false
+            };
+        }
 
-                if (Query("SELECT C.name FROM sys.indexes A JOIN sys.index_columns B"
-                    + " ON A.object_id = B.object_id AND A.index_id = B.index_id"
-                    + " JOIN sys.columns C ON B.object_id = C.object_id AND B.column_id = C.column_id"
-                    + $" WHERE A.object_id = OBJECT_ID('{fk.Name}') AND A.is_primary_key = 1"
-                    + " ORDER BY B.index_column_id ASC", null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) keys.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
+        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        {
+            return Query("SELECT C.name FROM sys.indexes A JOIN sys.index_columns B"
+                + " ON A.object_id = B.object_id AND A.index_id = B.index_id"
+                + " JOIN sys.columns C ON B.object_id = C.object_id AND B.column_id = C.column_id"
+                + $" WHERE A.object_id = OBJECT_ID('{table}') AND A.is_primary_key = 1"
+                + " ORDER BY B.index_column_id ASC", null, out data);
+        }
 
-                fk.KeyFields = keys.ToArray();
-                progress.OnProgress(total, ++position);
-            }
+        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        {
+            return Query("SELECT C.name FROM sysconstraints A JOIN sysforeignkeys B ON A.constid = B.constid"
+                + $" JOIN sysobjects C ON C.type = 'U' AND C.id = B.rkeyid WHERE A.id = OBJECT_ID('{table}')",
+                null, out data);
+        }
 
-            // 获取每个表的外键指向的表清单
-            foreach (TableFK fk in fks)
-            {
-                if (Query("SELECT C.name FROM sysconstraints A JOIN sysforeignkeys B ON A.constid = B.constid"
-                    + $" JOIN sysobjects C ON C.type = 'U' AND C.id = B.rkeyid WHERE A.id = OBJECT_ID('{fk.Name}')",
-                    null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) fk.FKs.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
-                progress.OnProgress(total, ++position);
-            }
-
-            int order = 100;
-
-            foreach (TableFK fk in fks)
-                if (fk.FKs.Count == 0 || (fk.FKs.Count == 1 && fk.FKs[0].Equals(fk.Name)))
-                    fk.Order = order;
-
-            order += 100;
-            while (order <= 10000) // 设定一个级别上限：100 级
-            {
-                int left = 0;
-                List<TableFK> lastList = new List<TableFK>();
-
-                // 创建上一轮次的结果清单
-                foreach (TableFK fk in fks)
-                    if (fk.Order > 0) lastList.Add(fk);
-
-                foreach (TableFK fk in fks)
-                    if (fk.Order == 0)
-                    {
-                        bool done = true;
-
-                        // 检查是否所有外键指向表都在上一轮清单里面
-                        foreach (string s in fk.FKs)
-                        {
-                            bool found = false;
-
-                            foreach (TableFK fk2 in lastList)
-                                if (fk2.Name.Equals(s))
-                                {
-                                    found = true;
-                                    break;
-                                }
-
-                            if (!found)
-                            {
-                                done = false;
-                                break;
-                            }
-                        }
-                        if (done)
-                            fk.Order = order;
-                        else
-                            left++;
-                    }
-
-                if (left == 0) break;
-                order += 100;
-            }
-
-            foreach (TableFK fk in fks)
-                lst.Add(new TableInfo()
-                {
-                    Name = fk.Name,
-                    KeyFields = fk.KeyFields,
-                    Order = fk.Order,
-                    References = fk.FKs.ToArray()
-                });
-
-            lst.Sort(new TableInfoComparer());
-
-            return true;
+        protected override bool GetTables(out IDataWrapper data)
+        {
+            return Query("SELECT A.name, B.name AS 'schema' FROM sysobjects A"
+                + " JOIN sysusers B ON A.uid = B.uid WHERE A.type = 'U'"
+                + " ORDER BY B.name ASC, A.name ASC", null, out data);
         }
 
         private string[] ModifyFields(string[] fields, string[] skipFields, string prefix)
@@ -689,7 +552,11 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         {
             try
             {
-                SqlCommand cmd = new SqlCommand(sql, conn, trans);
+                SqlCommand cmd = new SqlCommand(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -701,9 +568,9 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
                 reader = null;
 
                 return false;
@@ -959,8 +826,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -969,13 +836,5 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 trans = null;
             }
         }
-    }
-
-    /// <summary>
-    /// 表外键信息
-    /// </summary>
-    internal class TableFK : TableInfo
-    {
-        public List<string> FKs { get; } = new List<string>(); // 外键指向表
     }
 }

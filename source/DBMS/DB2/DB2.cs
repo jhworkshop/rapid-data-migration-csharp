@@ -10,13 +10,15 @@ namespace DB2
     /// <summary>
     /// DB2
     /// </summary>
-    public class DB2 : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class DB2 : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
         private readonly DB2Connection conn = new DB2Connection();
         private DB2Transaction trans = null;
-        private string errMsg = "";
-        private string title = "DB2";
-        private string schema = "";
+
+        public DB2()
+        {
+            LogTitle = GetName();
+        }
 
         public bool BeginTransaction()
         {
@@ -28,8 +30,8 @@ namespace DB2
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -65,7 +67,7 @@ namespace DB2
 
             data.MapFields(fields);
 
-            sb.Append($"INSERT INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+            sb.Append($"INSERT INTO {ProcessTableName(tableName, table.DestSchema)} ({ProcessFieldNames(fields)})")
                 .AppendLine().Append("VALUES").AppendLine()
                 .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)
@@ -87,9 +89,9 @@ namespace DB2
 
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"destTable.Substring(1, destTable.Length - 2)_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
+            string tmpTable = $"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable, table.DestSchema);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(fields[0]);
@@ -122,9 +124,9 @@ namespace DB2
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"destTable.Substring(1, destTable.Length - 2)_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
+            string tmpTable = $"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable, table.DestSchema);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(table.KeyFields[0]);
@@ -162,12 +164,12 @@ namespace DB2
         {
             if (bytes == null) return "NULL";
 
-            StringBuilder sb = new StringBuilder("0x", bytes.Length * 2 + 4); // 冗余两个字符，确保不触发内存扩展
+            StringBuilder sb = new StringBuilder("BLOB(x'", bytes.Length * 2 + 16); // 冗余几个字符，确保不触发内存扩展
 
             foreach (byte b in bytes)
                 sb.Append(b.ToString("X2"));
 
-            return sb.ToString();
+            return sb.Append("')").ToString();
         }
 
         public void Close()
@@ -189,8 +191,8 @@ namespace DB2
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -202,32 +204,27 @@ namespace DB2
 
         public bool Connect(Database db)
         {
-            title = $"{db.Server}/{db.DB}";
-
             string security = db.Encrypt ? ";Security=SSL" : "";
-            string[] ss = db.DB.Split(new char[] { ':' }, StringSplitOptions.RemoveEmptyEntries);
 
-            if (ss.Length > 1)
-                schema = ss[1];
-            else
-                schema = "";
-
+            LogTitle = $"{db.Server}/{db.DB}";
+            Schema = db.Schema;
+            Timeout = db.Timeout;
             try
             {
                 conn.Close();
-                conn.ConnectionString = $"Server={db.Server}:{db.Port};Database={ss[0]};User ID={db.User}"
+                conn.ConnectionString = $"Server={db.Server}:{db.Port};Database={db.DB};User ID={db.User}"
                     + $";Password={db.Pwd};Pooling=false;Persist Security Info=True{security}";
                 conn.Open();
 
-                if (!string.IsNullOrWhiteSpace(schema))
-                    Execute($"SET SCHEMA {schema}", null, out _);
+                if (!string.IsNullOrEmpty(Schema))
+                    Execute($"SET SCHEMA {Schema}", null, out _);
 
                 return true;
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -236,7 +233,7 @@ namespace DB2
         private bool EnableIdentityInsert(string tableName, bool status)
         {
             string sql = $"SELECT COLNAME FROM SYSCAT.COLUMNS WHERE TABNAME = '{tableName}' AND IDENTITY = 'Y'";
-            if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
+            if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
 
             if (Query(sql, null, out IDataWrapper data))
             {
@@ -246,7 +243,7 @@ namespace DB2
                     {
                         string col = data.GetValue(0).ToString();
 
-                        Execute("ALTER TABLE {ProcessTableName(tableName)}"
+                        Execute($"ALTER TABLE {ProcessTableName(tableName, Schema)}"
                             + $" ALTER COLUMN {ProcessFieldName(col)} SET GENERATED "
                             + (status ? "BY DEFAULT" : "ALWAYS"), null, out _);
                     }
@@ -260,51 +257,6 @@ namespace DB2
             }
 
             return false;
-        }
-
-        private string[] ExcludeFields(string[] fields, string[] skipFields)
-        {
-            if (skipFields == null || skipFields.Length == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>(), skipList = new List<string>();
-
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
-        }
-
-        private string[] ExcludeFields(string[] fields, string[] skipFields, string[] skipFields2)
-        {
-            List<string> skipList = new List<string>();
-
-            if (skipFields != null && skipFields.Length != 0)
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-            if (skipFields2 != null && skipFields2.Length != 0)
-                foreach (string s in skipFields2)
-                    skipList.Add(s.ToLower());
-
-            if (skipList.Count == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>();
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
         }
 
         public bool ExecScript(Table table, object script, out uint count)
@@ -347,8 +299,8 @@ namespace DB2
             }
             catch (Exception ex)
             {
-                errMsg = $"{table.DestName}：{ex.Message}";
-                Logger.WriteLogExcept(title, ex);
+                LastError = $"{table.DestName}：{ex.Message}";
+                Logger.WriteLogExcept(LogTitle, ex);
             }
 
             return false;
@@ -358,7 +310,11 @@ namespace DB2
         {
             try
             {
-                DB2Command cmd = new DB2Command(sql, conn, trans);
+                DB2Command cmd = new DB2Command(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -370,18 +326,28 @@ namespace DB2
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
                 count = 0;
 
                 return false;
             }
         }
 
-        public bool GetFieldNames(string tableName, out string[] fieldNames)
+        private string ExtractTableName(string name)
         {
-            if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, out IDataWrapper data))
+            if (string.IsNullOrEmpty(name)) return "";
+
+            if (name.StartsWith("\"")) name = name.Substring(1);
+            if (name.EndsWith("\"")) name = name.Substring(0, name.Length - 1);
+
+            return name;
+        }
+
+        public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
+        {
+            if (Query($"SELECT * FROM {ProcessTableName(tableName, schema)} WHERE 1 = 0", null, out IDataWrapper data))
                 try
                 {
                     fieldNames = data.GetFieldNames();
@@ -415,141 +381,45 @@ namespace DB2
                 return obj.ToString();
         }
 
-        public string GetLastError()
-        {
-            return errMsg;
-        }
-
         public string GetName()
         {
             return "DB2";
         }
 
-        public bool GetTables(IProgress progress, List<TableInfo> lst)
+        public DBMSParams GetParams()
         {
-            List<TableFK> fks = new List<TableFK>();
-            int total = 0, position = 0;
-
-            // 获取所有用户表清单
-            string sql = "SELECT TABNAME FROM SYSCAT.TABLES WHERE TYPE = 'T'";
-
-            if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
-            if (Query(sql + " ORDER BY TABNAME ASC", null, out IDataWrapper data))
-                try
-                {
-                    while (data.Read())
-                        fks.Add(new TableFK() { Name = (string)data.GetValue(0), Order = 0 });
-
-                    total = data.ReadCount * 2;
-                }
-                finally
-                {
-                    data.Close();
-                }
-
-            // 获取每个表的主键字段清单
-            foreach (TableFK fk in fks)
+            return new DBMSParams()
             {
-                List<string> keys = new List<string>();
+                CharSet = false,
+                Compress = false
+            };
+        }
 
-                sql = $"SELECT COLNAME FROM SYSCAT.COLUMNS WHERE TABNAME = '{fk.Name}' AND KEYSEQ = 1";
-                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
-                if (Query(sql + " ORDER BY COLNAME ASC", null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) keys.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
+        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        {
+            string sql = $"SELECT COLNAME FROM SYSCAT.COLUMNS WHERE TABNAME = '{table}' AND KEYSEQ = 1";
 
-                fk.KeyFields = keys.ToArray();
-                progress.OnProgress(total, ++position);
-            }
+            if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
 
-            // 获取每个表的外键指向的表清单
-            foreach (TableFK fk in fks)
-            {
-                sql = $"SELECT REFTABNAME FROM SYSCAT.REFERENCES WHERE TABNAME = '{fk.Name}'";
-                if (!string.IsNullOrWhiteSpace(schema)) sql += $" AND TABSCHEMA = '{schema}'";
-                if (Query(sql, null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) fk.FKs.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
-                progress.OnProgress(total, ++position);
-            }
+            return Query(sql + " ORDER BY COLNAME ASC", null, out data);
+        }
 
-            int order = 100;
+        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        {
+            string sql = $"SELECT REFTABNAME FROM SYSCAT.REFERENCES WHERE TABNAME = '{table}'";
 
-            foreach (TableFK fk in fks)
-                if (fk.FKs.Count == 0 || (fk.FKs.Count == 1 && fk.FKs[0].Equals(fk.Name)))
-                    fk.Order = order;
+            if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
 
-            order += 100;
-            while (order <= 10000) // 设定一个级别上限：100 级
-            {
-                int left = 0;
-                List<TableFK> lastList = new List<TableFK>();
+            return Query(sql, null, out data);
+        }
 
-                // 创建上一轮次的结果清单
-                foreach (TableFK fk in fks)
-                    if (fk.Order > 0) lastList.Add(fk);
+        protected override bool GetTables(out IDataWrapper data)
+        {
+            string sql = "SELECT TABNAME, TABSCHEMA FROM SYSCAT.TABLES WHERE TYPE = 'T'";
 
-                foreach (TableFK fk in fks)
-                    if (fk.Order == 0)
-                    {
-                        bool done = true;
+            if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
 
-                        // 检查是否所有外键指向表都在上一轮清单里面
-                        foreach (string s in fk.FKs)
-                        {
-                            bool found = false;
-
-                            foreach (TableFK fk2 in lastList)
-                                if (fk2.Name.Equals(s))
-                                {
-                                    found = true;
-                                    break;
-                                }
-
-                            if (!found)
-                            {
-                                done = false;
-                                break;
-                            }
-                        }
-                        if (done)
-                            fk.Order = order;
-                        else
-                            left++;
-                    }
-
-                if (left == 0) break;
-                order += 100;
-            }
-
-            foreach (TableFK fk in fks)
-                lst.Add(new TableInfo()
-                {
-                    Name = fk.Name,
-                    KeyFields = fk.KeyFields,
-                    Order = fk.Order,
-                    References = fk.FKs.ToArray()
-                });
-
-            lst.Sort(new TableInfoComparer());
-
-            return true;
+            return Query(sql + " ORDER BY TABSCHEMA ASC, TABNAME ASC", null, out data);
         }
 
         private string ProcessFieldName(string fieldName, string prefix = "")
@@ -601,7 +471,7 @@ namespace DB2
             }
         }
 
-        private string ProcessTableName(string tableName, string alias = "")
+        private string ProcessTableName(string tableName, string schema, string alias = "")
         {
             if (string.IsNullOrEmpty(tableName))
                 return "";
@@ -610,8 +480,19 @@ namespace DB2
                 if (!tableName.StartsWith("\""))
                     tableName = $"\"{tableName}\"";
 
+                if (!string.IsNullOrEmpty(schema))
+                    if (!schema.StartsWith("\""))
+                        tableName = $"\"{schema}\".{tableName}";
+                    else
+                        tableName = $"{schema}.{tableName}";
+                else if (!string.IsNullOrEmpty(Schema))
+                    if (!Schema.StartsWith("\""))
+                        tableName = $"\"{Schema}\".{tableName}";
+                    else
+                        tableName = $"{Schema}.{tableName}";
+
                 if (!string.IsNullOrEmpty(alias))
-                    tableName += $" {alias}";
+                    tableName += " " + alias;
 
                 return tableName;
             }
@@ -621,7 +502,11 @@ namespace DB2
         {
             try
             {
-                DB2Command cmd = new DB2Command(sql, conn, trans);
+                DB2Command cmd = new DB2Command(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -633,9 +518,9 @@ namespace DB2
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
                 reader = null;
 
                 return false;
@@ -646,7 +531,8 @@ namespace DB2
         public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("SELECT COUNT(*) AS \"_ROW_COUNT_\" FROM ").Append(ProcessTableName(table.SourceName));
+                .Append("SELECT COUNT(*) AS \"_ROW_COUNT_\" FROM ")
+                .Append(ProcessTableName(table.SourceName, table.SourceSchema));
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
@@ -685,10 +571,10 @@ namespace DB2
             if (table.KeyFields.Length > 0)
             {
                 string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
-                string tableName = ProcessTableName(table.SourceName);
-                string tableNameWithB = ProcessTableName(table.SourceName, "B");
+                string tableName = ProcessTableName(table.SourceName, table.SourceSchema);
+                string tableNameWithB = ProcessTableName(table.SourceName, table.SourceSchema, "B");
                 string keyFields = ProcessFieldNames(table.KeyFields);
-                string keyFieldsWithAlias = ProcessFieldNames(table.KeyFields, ProcessTableName(table.SourceName));
+                string keyFieldsWithAlias = ProcessFieldNames(table.KeyFields, ProcessTableName(table.SourceName, table.SourceSchema));
                 string keyField = ProcessFieldName(table.KeyFields[0]);
 
                 sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT {keyFields} FROM")
@@ -717,10 +603,10 @@ namespace DB2
                 // {WHERE <whereSQL>}
                 // ) A WHERE A."_RowNum_" BETWEEN <fromRow> AND <toRow>
                 string fieldsSQL = ProcessFieldNames(table.SourceFields);
-                string fieldsWithAlias = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
+                string fieldsWithAlias = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName, table.SourceSchema));
 
                 sb.Append($"SELECT {fieldsSQL} FROM (SELECT ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
-                    .Append($" AS \"_RowNum_\", {fieldsWithAlias} FROM {ProcessTableName(table.SourceName)}");
+                    .Append($" AS \"_RowNum_\", {fieldsWithAlias} FROM {ProcessTableName(table.SourceName, table.SourceSchema)}");
                 if (!string.IsNullOrEmpty(table.WhereSQL))
                 {
                     if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
@@ -769,8 +655,8 @@ namespace DB2
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -791,13 +677,5 @@ namespace DB2
         public string InsertSQL { get; set; }  // 数据
         public string MergeSQL { get; set; }   // 合并 SQL
         public string CleanSQL { get; set; }   // 清理 SQL
-    }
-
-    /// <summary>
-    /// 表外键信息
-    /// </summary>
-    internal class TableFK : TableInfo
-    {
-        public List<string> FKs { get; } = new List<string>(); // 外键指向表
     }
 }

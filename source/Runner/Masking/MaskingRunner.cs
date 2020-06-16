@@ -4,8 +4,6 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,21 +20,26 @@ namespace JHWork.DataMigration.Runner.Masking
     /// <summary>
     /// 脱敏执行器，执行数据脱敏任务。
     /// </summary>
-    public class MaskingRunner : IAssemblyLoader, IRunnerAnalyzer, IRunnerExecutor, IRunnerAssistant
+    public class MaskingRunner : RunnerBase, IAssemblyLoader, IRunnerAnalyzer, IRunnerExecutor, IRunnerAssistant
     {
         private IStopStatus status;
 
         private void AnalyseDatabase(JObject obj, JObject inherited, Database db, string sdb, string prefix)
         {
+            string schema = Database.AnalyseSchema(sdb);
+
             db.DBMS = GetJValue(obj, inherited, "dbms", prefix);
             db.Server = GetJValue(obj, inherited, "server", prefix);
             db.Port = uint.Parse(GetJValue(obj, inherited, "port", prefix));
-            db.DB = sdb;
+            db.Schema = GetJValue(obj, inherited, "schema", prefix);
+            db.DB = Database.AnalyseDB(sdb);
+            if (!string.IsNullOrEmpty(schema)) db.Schema = schema;
             db.User = GetJValue(obj, inherited, "user", prefix);
             db.Pwd = GetJValue(obj, inherited, "password", prefix);
             db.CharSet = GetJValue(obj, inherited, "charset", prefix, "utf8");
             db.Encrypt = int.Parse(GetJValue(obj, inherited, "encrypt", prefix, "0")) != 0;
             db.Compress = int.Parse(GetJValue(obj, inherited, "compress", prefix, "0")) != 0;
+            db.Timeout = uint.Parse(GetJValue(obj, inherited, "timeout", prefix, "60"));
         }
 
         public Instance[] AnalyseInstance(JArray objs, JObject inherited, string path)
@@ -82,11 +85,13 @@ namespace JHWork.DataMigration.Runner.Masking
             for (int i = 0; i < tables.Count; i++)
             {
                 JObject o = tables[i] as JObject;
-                string[] names = o["name"].ToString().Split(',');
+                string name = o["name"].ToString();
                 MaskingTable table = new MaskingTable()
                 {
-                    SourceName = names[0],
-                    DestName = names[0],
+                    SourceName = Table.AnalyseName(name),
+                    SourceSchema = Table.AnalyseSchema(name),
+                    DestName = Table.AnalyseName(name),
+                    DestSchema = Table.AnalyseSchema(name),
                     Order = int.Parse(o["order"].ToString()),
                     OrderSQL = o["orderSQL"].ToString(),
                     WhereSQL = o["whereSQL"].ToString(),
@@ -141,64 +146,6 @@ namespace JHWork.DataMigration.Runner.Masking
             AnalyseTable($"{path}\\{GetJValue(obj, inherited, "tables")}", task);
 
             task.Name = $"{task.Source.DB}";
-        }
-
-        private bool Connect(Common.Task task, Database db, out IDBMSReader reader, out IDBMSWriter writer)
-        {
-            reader = DBMSFactory.GetDBMSReaderByName(db.DBMS);
-            writer = DBMSFactory.GetDBMSWriterByName(db.DBMS);
-            if (reader == null || writer == null)
-            {
-                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
-
-                Logger.WriteLog("系统", errMsg);
-                task.ErrorMsg = errMsg;
-
-                return false;
-            }
-            else
-            {
-                bool rst = reader.Connect(db);
-
-                if (!rst) {
-                    task.ErrorMsg = reader.GetLastError();
-                    return false;
-                }
-
-                rst = writer.Connect(db);
-                if (!rst)
-                    task.ErrorMsg = writer.GetLastError();
-
-                return rst;
-            }
-        }
-
-        private string[] CreateThreadAction()
-        {
-            return new string[] { "read", "write" };
-        }
-
-        private int[] CreateThreadAction(int count)
-        {
-            int[] rst = new int[count];
-
-            for (int i = 0; i < count; i++)
-                rst[i] = i + 1;
-
-            return rst;
-        }
-
-        private void DuplicateDatabase(Database source, Database dest)
-        {
-            dest.DBMS = source.DBMS;
-            dest.Server = source.Server;
-            dest.Port = source.Port;
-            dest.DB = source.DB;
-            dest.User = source.User;
-            dest.Pwd = source.Pwd;
-            dest.CharSet = source.CharSet;
-            dest.Encrypt = source.Encrypt;
-            dest.Compress = source.Compress;
         }
 
         public void Execute(Instance ins, IStopStatus status)
@@ -276,19 +223,6 @@ namespace JHWork.DataMigration.Runner.Masking
             }
         }
 
-        private string GetJValue(JObject obj, JObject inherited, string key, string prefix = "", string defValue = "")
-        {
-            if (obj.ContainsKey(key))
-                return obj[key].ToString();
-            else if (inherited != null)
-            {
-                if (!string.IsNullOrEmpty(prefix)) key = $"{prefix}.{key}";
-                if (inherited.ContainsKey(key)) return inherited[key].ToString();
-            }
-
-            return defValue;
-        }
-
         public string GetName()
         {
             return "Masking";
@@ -311,17 +245,12 @@ namespace JHWork.DataMigration.Runner.Masking
             }
         }
 
-        private JObject LoadAndDeserialize(string file)
-        {
-            return JsonConvert.DeserializeObject(File.ReadAllText(file)) as JObject;
-        }
-
         public void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, out string param)
         {
             if (ins.Tasks[0] is MaskingTask task)
             {
-                DuplicateDatabase(task.Source, source);
-                DuplicateDatabase(task.Source, dest);
+                source.Duplicate(task.Source);
+                dest.Duplicate(task.Source);
 
                 tables.AddRange(task.Tables);
 
@@ -336,7 +265,7 @@ namespace JHWork.DataMigration.Runner.Masking
             reason = "取消操作";
             if (status.Stopped) return;
 
-            if (Connect(task, task.Source, out IDBMSReader source, out IDBMSWriter dest))
+            if (Connect(task, task.Source, out IDBMSReader source, task.Source, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -419,7 +348,7 @@ namespace JHWork.DataMigration.Runner.Masking
                             else
                             {
                                 table.Status = DataStates.Error;
-                                reason = source.GetLastError();
+                                reason = source.LastError;
                                 break;
                             }
 
@@ -438,7 +367,7 @@ namespace JHWork.DataMigration.Runner.Masking
                                 if (!dest.ExecScript(table, script, out uint r))
                                 {
                                     table.Status = DataStates.Error;
-                                    reason = dest.GetLastError();
+                                    reason = dest.LastError;
                                     break;
                                 }
 
@@ -475,7 +404,7 @@ namespace JHWork.DataMigration.Runner.Masking
                     task.Progress = 0;
                     task.Total = 0;
                     task.Status = DataStates.Running;
-                    if (Connect(task, task.Source, out IDBMSReader source, out IDBMSWriter dest))
+                    if (Connect(task, task.Source, out IDBMSReader source, task.Source, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -509,7 +438,7 @@ namespace JHWork.DataMigration.Runner.Masking
             bool isError = true;
 
             // #1: 检查表存在，并缓存字段
-            if (source.GetFieldNames(table.SourceName, out string[] fields))
+            if (source.GetFieldNames(table.SourceName, table.SourceSchema, out string[] fields))
             {
                 table.SourceFields = fields;
 
@@ -526,7 +455,7 @@ namespace JHWork.DataMigration.Runner.Masking
             if (isError)
             {
                 table.Status = DataStates.Error;
-                task.ErrorMsg = source.GetLastError();
+                task.ErrorMsg = source.LastError;
             }
         }
 
@@ -560,7 +489,7 @@ namespace JHWork.DataMigration.Runner.Masking
             {
                 JObject obj = new JObject()
                 {
-                    ["name"] = t.SourceName.Equals(t.DestName) ? t.SourceName : $"{t.SourceName},{t.DestName}",
+                    ["name"] = t.DestFullName,
                     ["order"] = t.Order,
                     ["orderSQL"] = t.OrderSQL,
                     ["whereSQL"] = t.WhereSQL,
@@ -584,14 +513,16 @@ namespace JHWork.DataMigration.Runner.Masking
             // 任务配置
             JObject srcDB = new JObject()
             {
-                ["dbms"] = source.DBMS,
-                ["server"] = source.Server,
-                ["port"] = source.Port,
-                ["user"] = source.User,
-                ["password"] = source.Pwd,
-                ["charset"] = source.CharSet,
-                ["compress"] = source.Compress ? 1 : 0,
-                ["encrypt"] = source.Encrypt ? 1 : 0
+                ["dbms"] = dest.DBMS,
+                ["server"] = dest.Server,
+                ["port"] = dest.Port,
+                ["schema"] = dest.Schema,
+                ["user"] = dest.User,
+                ["password"] = dest.Pwd,
+                ["charset"] = dest.CharSet,
+                ["compress"] = dest.Compress ? 1 : 0,
+                ["encrypt"] = dest.Encrypt ? 1 : 0,
+                ["timeout"] = dest.Timeout,
             };
             JArray dbArray = new JArray();
 
@@ -619,22 +550,6 @@ namespace JHWork.DataMigration.Runner.Masking
             };
 
             WriteFile($"{path}Profile-{file}", JsonConvert.SerializeObject(profileData, Formatting.Indented));
-        }
-
-        private void WriteFile(string file, string content)
-        {
-            try
-            {
-                using (FileStream fs = new FileStream(file, FileMode.Create))
-                {
-                    using (StreamWriter writer = new StreamWriter(fs, new UTF8Encoding(false)))
-                    {
-                        writer.Write(content);
-                        writer.Flush();
-                    }
-                }
-            }
-            catch (Exception) { }
         }
     }
 }

@@ -4,8 +4,6 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,7 +20,7 @@ namespace JHWork.DataMigration.Runner.Migration
     /// <summary>
     /// 迁移执行器，执行库与库之间的数据迁移。
     /// </summary>
-    public class MigrationRunner : IAssemblyLoader, IRunnerAnalyzer, IRunnerExecutor, IRunnerAssistant
+    public class MigrationRunner : RunnerBase, IAssemblyLoader, IRunnerAnalyzer, IRunnerExecutor, IRunnerAssistant
     {
         private IStopStatus status;
 
@@ -31,19 +29,32 @@ namespace JHWork.DataMigration.Runner.Migration
             db.DBMS = GetJValue(obj, inherited, "dbms", prefix);
             db.Server = GetJValue(obj, inherited, "server", prefix);
             db.Port = uint.Parse(GetJValue(obj, inherited, "port", prefix));
+            db.Schema = GetJValue(obj, inherited, "schema", prefix);
             db.User = GetJValue(obj, inherited, "user", prefix);
             db.Pwd = GetJValue(obj, inherited, "password", prefix);
             db.CharSet = GetJValue(obj, inherited, "charset", prefix, "utf8");
             db.Encrypt = int.Parse(GetJValue(obj, inherited, "encrypt", prefix, "0")) != 0;
             db.Compress = int.Parse(GetJValue(obj, inherited, "compress", prefix, "0")) != 0;
+            db.Timeout = uint.Parse(GetJValue(obj, inherited, "timeout", prefix, "60"));
         }
 
         private void AnalyseDatabase(string db, MigrationTask task)
         {
-            string[] s = db.Split(',');
+            string[] dbs = db.Split(',');
+            string dbName = Database.AnalyseDB(dbs[0]);
+            string schema = Database.AnalyseSchema(dbs[0]);
 
-            task.Source.DB = s[0];
-            task.Dest.DB = s.Length > 1 ? s[1] : s[0];
+            task.Source.DB = dbName;
+            if (!string.IsNullOrEmpty(schema)) task.Source.Schema = schema;
+
+            if (dbs.Length > 1)
+            {
+                db = dbs[1];
+                dbName = Database.AnalyseDB(db);
+                schema = Database.AnalyseSchema(db);
+            }
+            task.Dest.DB = dbName;
+            if(!string.IsNullOrEmpty(schema)) task.Dest.Schema = schema;
         }
 
         public Instance[] AnalyseInstance(JArray objs, JObject inherited, string path)
@@ -92,14 +103,15 @@ namespace JHWork.DataMigration.Runner.Migration
                 string[] names = o["name"].ToString().Split(',');
                 MigrationTable table = new MigrationTable()
                 {
-                    SourceName = names[0],
-                    DestName = names.Length > 1 ? names[1] : names[0],
+                    SourceName = Table.AnalyseName(names[0]),
+                    SourceSchema = Table.AnalyseSchema(names[0]),
+                    DestName = Table.AnalyseName(names.Length > 1 ? names[1] : names[0]),
+                    DestSchema = Table.AnalyseSchema(names.Length > 1 ? names[1] : names[0]),
                     Order = int.Parse(o["order"].ToString()),
                     OrderSQL = o["orderSQL"].ToString(),
                     WhereSQL = o["whereSQL"].ToString(),
                     PageSize = uint.Parse(o["pageSize"].ToString()),
-                    WriteMode = "UPDATE".Equals(o["mode"].ToString().ToUpper()) ? WriteModes.Update
-                        : WriteModes.Append,
+                    WriteMode = "UPDATE".Equals(o["mode"].ToString().ToUpper()) ? WriteModes.Update : WriteModes.Append,
                     KeyFields = o["keyFields"].ToString().Split(','),
                     SkipFields = o["skipFields"].ToString().Split(','),
                     Filter = o["filter"].ToString(),
@@ -170,78 +182,6 @@ namespace JHWork.DataMigration.Runner.Migration
             AnalyseTable($"{path}\\{GetJValue(obj, inherited, "tables")}", task);
 
             task.Name = $"{task.Source.DB} -> {task.Dest.DB}";
-        }
-
-        private bool Connect(Common.Task task, Database db, out IDBMSReader reader)
-        {
-            reader = DBMSFactory.GetDBMSReaderByName(db.DBMS);
-            if (reader == null)
-            {
-                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
-
-                Logger.WriteLog("系统", errMsg);
-                task.ErrorMsg = errMsg;
-
-                return false;
-            }
-            else
-            {
-                bool rst = reader.Connect(db);
-
-                if (!rst) task.ErrorMsg = reader.GetLastError();
-
-                return rst;
-            }
-        }
-
-        private bool Connect(Common.Task task, Database db, out IDBMSWriter writer)
-        {
-            writer = DBMSFactory.GetDBMSWriterByName(db.DBMS);
-            if (writer == null)
-            {
-                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
-
-                Logger.WriteLog("系统", errMsg);
-                task.ErrorMsg = errMsg;
-
-                return false;
-            }
-            else
-            {
-                bool rst = writer.Connect(db);
-
-                if (!rst) task.ErrorMsg = writer.GetLastError();
-
-                return rst;
-            }
-        }
-
-        private string[] CreateThreadAction()
-        {
-            return new string[] { "read", "write" };
-        }
-
-        private int[] CreateThreadAction(int count)
-        {
-            int[] rst = new int[count];
-
-            for (int i = 0; i < count; i++)
-                rst[i] = i + 1;
-
-            return rst;
-        }
-
-        private void DuplicateDatabase(Database source, Database dest)
-        {
-            dest.DBMS = source.DBMS;
-            dest.Server = source.Server;
-            dest.Port = source.Port;
-            dest.DB = source.DB;
-            dest.User = source.User;
-            dest.Pwd = source.Pwd;
-            dest.CharSet = source.CharSet;
-            dest.Encrypt = source.Encrypt;
-            dest.Compress = source.Compress;
         }
 
         public void Execute(Instance ins, IStopStatus status)
@@ -344,19 +284,6 @@ namespace JHWork.DataMigration.Runner.Migration
             }
         }
 
-        private string GetJValue(JObject obj, JObject inherited, string key, string prefix = "", string defValue = "")
-        {
-            if (obj.ContainsKey(key))
-                return obj[key].ToString();
-            else if (inherited != null)
-            {
-                if (!string.IsNullOrEmpty(prefix)) key = $"{prefix}.{key}";
-                if (inherited.ContainsKey(key)) return inherited[key].ToString();
-            }
-
-            return defValue;
-        }
-
         public string GetName()
         {
             return "Migration";
@@ -442,17 +369,12 @@ namespace JHWork.DataMigration.Runner.Migration
             }
         }
 
-        private JObject LoadAndDeserialize(string file)
-        {
-            return JsonConvert.DeserializeObject(File.ReadAllText(file)) as JObject;
-        }
-
         public void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, out string param)
         {
             if (ins.Tasks[0] is MigrationTask task)
             {
-                DuplicateDatabase(task.Source, source);
-                DuplicateDatabase(task.Dest, dest);
+                source.Duplicate(task.Source);
+                dest.Duplicate(task.Dest);
 
                 foreach (Table[] t in task.Tables)
                     tables.AddRange(t);
@@ -468,7 +390,7 @@ namespace JHWork.DataMigration.Runner.Migration
             reason = "取消操作";
             if (status.Stopped) return;
 
-            if (Connect(task, task.Source, out IDBMSReader source) && Connect(task, task.Dest, out IDBMSWriter dest))
+            if (Connect(task, task.Source, out IDBMSReader source, task.Dest, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -551,7 +473,7 @@ namespace JHWork.DataMigration.Runner.Migration
                             else
                             {
                                 table.Status = DataStates.Error;
-                                reason = source.GetLastError();
+                                reason = source.LastError;
                                 break;
                             }
 
@@ -570,7 +492,7 @@ namespace JHWork.DataMigration.Runner.Migration
                                 if (!dest.ExecScript(table, script, out uint r))
                                 {
                                     table.Status = DataStates.Error;
-                                    reason = dest.GetLastError();
+                                    reason = dest.LastError;
                                     break;
                                 }
 
@@ -607,8 +529,7 @@ namespace JHWork.DataMigration.Runner.Migration
                     task.Progress = 0;
                     task.Total = 0;
                     task.Status = DataStates.Running;
-                    if (Connect(task, task.Source, out IDBMSReader source)
-                        && Connect(task, task.Dest, out IDBMSWriter dest))
+                    if (Connect(task, task.Source, out IDBMSReader source, task.Dest, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -649,7 +570,7 @@ namespace JHWork.DataMigration.Runner.Migration
                     bool isError = true;
 
                     // #1: 检查表存在，并缓存字段
-                    if (source.GetFieldNames(table.SourceName, out string[] fields))
+                    if (source.GetFieldNames(table.SourceName, table.SourceSchema, out string[] fields))
                     {
                         table.SourceFields = fields;
 
@@ -666,17 +587,17 @@ namespace JHWork.DataMigration.Runner.Migration
                     if (isError)
                     {
                         table.Status = DataStates.Error;
-                        task.ErrorMsg = source.GetLastError();
+                        task.ErrorMsg = source.LastError;
                     }
                 }
                 else if ("write".Equals(act))
                 {
-                    if (dest.GetFieldNames(table.DestName, out string[] fields))
+                    if (dest.GetFieldNames(table.DestName, table.DestSchema, out string[] fields))
                         table.DestFields = fields;
                     else
                     {
                         table.Status = DataStates.Error;
-                        task.ErrorMsg = dest.GetLastError();
+                        task.ErrorMsg = dest.LastError;
                     }
                 }
             });
@@ -712,7 +633,7 @@ namespace JHWork.DataMigration.Runner.Migration
             {
                 JObject obj = new JObject()
                 {
-                    ["name"] = t.SourceName.Equals(t.DestName) ? t.SourceName : $"{t.SourceName},{t.DestName}",
+                    ["name"] = t.SourceFullName.Equals(t.DestFullName) ? t.SourceFullName : $"{t.SourceFullName},{t.DestFullName}",
                     ["order"] = t.Order,
                     ["orderSQL"] = t.OrderSQL,
                     ["whereSQL"] = t.WhereSQL,
@@ -741,22 +662,26 @@ namespace JHWork.DataMigration.Runner.Migration
                 ["dbms"] = source.DBMS,
                 ["server"] = source.Server,
                 ["port"] = source.Port,
+                ["schema"] = source.Schema,
                 ["user"] = source.User,
                 ["password"] = source.Pwd,
                 ["charset"] = source.CharSet,
                 ["compress"] = source.Compress ? 1 : 0,
-                ["encrypt"] = source.Encrypt ? 1 : 0
+                ["encrypt"] = source.Encrypt ? 1 : 0,
+                ["timeout"] = source.Timeout
             };
             JObject dstDB = new JObject()
             {
                 ["dbms"] = dest.DBMS,
                 ["server"] = dest.Server,
                 ["port"] = dest.Port,
+                ["schema"] = dest.Schema,
                 ["user"] = dest.User,
                 ["password"] = dest.Pwd,
                 ["charset"] = dest.CharSet,
                 ["compress"] = dest.Compress ? 1 : 0,
-                ["encrypt"] = dest.Encrypt ? 1 : 0
+                ["encrypt"] = dest.Encrypt ? 1 : 0,
+                ["timeout"] = dest.Timeout
             };
             JArray dbArray = new JArray();
             if (source.DB.Equals(dest.DB))
@@ -784,22 +709,6 @@ namespace JHWork.DataMigration.Runner.Migration
             };
 
             WriteFile($"{path}Profile-{file}", JsonConvert.SerializeObject(profileData, Formatting.Indented));
-        }
-
-        private void WriteFile(string file, string content)
-        {
-            try
-            {
-                using (FileStream fs = new FileStream(file, FileMode.Create))
-                {
-                    using (StreamWriter writer = new StreamWriter(fs, new UTF8Encoding(false)))
-                    {
-                        writer.Write(content);
-                        writer.Flush();
-                    }
-                }
-            }
-            catch (Exception) { }
         }
     }
 }

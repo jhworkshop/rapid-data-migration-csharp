@@ -2,6 +2,7 @@
 using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Text;
 
@@ -110,13 +111,10 @@ namespace JHWork.DataMigration.DBMS.MySQL
     /// <summary>
     /// MySQL
     /// </summary>
-    public class MySQL : IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class MySQL : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
     {
         private MySqlConnection conn = null;
         private MySqlTransaction trans = null;
-        private string errMsg = "";
-        private string title = "MySQL";
-        private string dbName = "";
         private bool isRollback = false;
         private bool isSupportCSV = false;
 
@@ -131,8 +129,8 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -384,8 +382,8 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -400,9 +398,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
             string compress = db.Compress ? "true" : "false";
             string encrypt = db.Encrypt ? "Preferred" : "None";
 
-            title = $"{db.Server}/{db.DB}";
-            dbName = db.DB;
-
+            LogTitle = $"{db.Server}/{db.DB}";
+            Schema = db.DB;
+            Timeout = db.Timeout;
             try
             {
                 if (conn != null) conn.Close();
@@ -419,57 +417,13 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
         }
 
-        private string[] ExcludeFields(string[] fields, string[] skipFields)
-        {
-            if (skipFields == null || skipFields.Length == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>(), skipList = new List<string>();
-
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
-        }
-
-        private string[] ExcludeFields(string[] fields, string[] skipFields, string[] skipFields2)
-        {
-            List<string> skipList = new List<string>();
-
-            if (skipFields != null && skipFields.Length != 0)
-                foreach (string s in skipFields)
-                    skipList.Add(s.ToLower());
-
-            if (skipFields2 != null && skipFields2.Length != 0)
-                foreach (string s in skipFields2)
-                    skipList.Add(s.ToLower());
-
-            if (skipList.Count == 0)
-                return fields;
-            else
-            {
-                List<string> lst = new List<string>();
-
-                foreach (string s in fields)
-                    if (!skipList.Contains(s.ToLower()))
-                        lst.Add(s);
-
-                return lst.ToArray();
-            }
-        }
 
         public bool ExecScript(Table table, object script, out uint count)
         {
@@ -480,7 +434,11 @@ namespace JHWork.DataMigration.DBMS.MySQL
         {
             try
             {
-                MySqlCommand cmd = new MySqlCommand(sql, conn, trans);
+                MySqlCommand cmd = new MySqlCommand(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -492,9 +450,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
                 count = 0;
 
                 return false;
@@ -524,7 +482,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 return obj.ToString();
         }
 
-        public bool GetFieldNames(string tableName, out string[] fieldNames)
+        public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
         {
             if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, out IDataWrapper data))
                 try
@@ -561,14 +519,17 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 return obj.ToString();
         }
 
-        public string GetLastError()
-        {
-            return errMsg;
-        }
-
         public string GetName()
         {
             return "MySQL";
+        }
+
+        public DBMSParams GetParams()
+        {
+            return new DBMSParams()
+            {
+                Schema = false
+            };
         }
 
         private bool GetSupportCSV()
@@ -587,128 +548,23 @@ namespace JHWork.DataMigration.DBMS.MySQL
             return false;
         }
 
-        public bool GetTables(IProgress progress, List<TableInfo> lst)
+        protected override bool GetTableKeys(string table, out IDataWrapper data)
         {
-            List<TableFK> fks = new List<TableFK>();
-            int total = 0, position = 0;
+            return Query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
+                + $" WHERE TABLE_NAME = \"{table}\" AND CONSTRAINT_NAME = \"PRIMARY\""
+                + $" AND TABLE_SCHEMA = \"{Schema}\" ORDER BY ORDINAL_POSITION ASC", null, out data);
+        }
 
-            // 获取所有用户表清单
-            if (Query("SHOW TABLES", null, out IDataWrapper data))
-                try
-                {
-                    while (data.Read())
-                        fks.Add(new TableFK() { Name = (string)data.GetValue(0), Order = 0 });
+        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        {
+            return Query("SELECT REFERENCED_TABLE_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
+                + $" WHERE TABLE_SCHEMA = \"{Schema}\" AND CONSTRAINT_NAME <> \"PRIMARY\""
+                + $" AND TABLE_NAME = \"{table}\" AND REFERENCED_TABLE_NAME IS NOT NULL", null, out data);
+        }
 
-                    total = data.ReadCount * 2;
-                }
-                finally
-                {
-                    data.Close();
-                }
-
-            // 获取每个表的主键字段清单
-            foreach (TableFK fk in fks)
-            {
-                List<string> keys = new List<string>();
-
-                if (Query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
-                    + $" WHERE TABLE_NAME = \"{fk.Name}\" AND CONSTRAINT_NAME = \"PRIMARY\""
-                    + $" AND TABLE_SCHEMA = \"{dbName}\" ORDER BY ORDINAL_POSITION ASC", null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) keys.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
-
-                fk.KeyFields = keys.ToArray();
-                progress.OnProgress(total, ++position);
-            }
-
-            // 获取每个表的外键指向的表清单
-            foreach (TableFK fk in fks)
-            {
-                if (Query("SELECT REFERENCED_TABLE_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
-                    + $" WHERE TABLE_SCHEMA = \"{dbName}\" AND CONSTRAINT_NAME <> \"PRIMARY\""
-                    + $" AND TABLE_NAME = \"{fk.Name}\" AND REFERENCED_TABLE_NAME IS NOT NULL", null, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) fk.FKs.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
-                progress.OnProgress(total, ++position);
-            }
-
-            int order = 100;
-
-            foreach (TableFK fk in fks)
-                if (fk.FKs.Count == 0 || (fk.FKs.Count == 1 && fk.FKs[0].Equals(fk.Name)))
-                    fk.Order = order;
-
-            order += 100;
-            while (order <= 10000) // 设定一个级别上限：100 级
-            {
-                int left = 0;
-                List<TableFK> lastList = new List<TableFK>();
-
-                // 创建上一轮次的结果清单
-                foreach (TableFK fk in fks)
-                    if (fk.Order > 0) lastList.Add(fk);
-
-                foreach (TableFK fk in fks)
-                    if (fk.Order == 0)
-                    {
-                        bool done = true;
-
-                        // 检查是否所有外键指向表都在上一轮清单里面
-                        foreach (string s in fk.FKs)
-                        {
-                            bool found = false;
-
-                            foreach (TableFK fk2 in lastList)
-                                if (fk2.Name.Equals(s))
-                                {
-                                    found = true;
-                                    break;
-                                }
-
-                            if (!found)
-                            {
-                                done = false;
-                                break;
-                            }
-                        }
-                        if (done)
-                            fk.Order = order;
-                        else
-                            left++;
-                    }
-
-                if (left == 0) break;
-                order += 100;
-            }
-
-            foreach (TableFK fk in fks)
-                lst.Add(new TableInfo()
-                {
-                    Name = fk.Name,
-                    KeyFields = fk.KeyFields,
-                    Order = fk.Order,
-                    References = fk.FKs.ToArray()
-                });
-
-            lst.Sort(new TableInfoComparer());
-
-            return true;
+        protected override bool GetTables(out IDataWrapper data)
+        {
+            return Query("SHOW TABLES", null, out data);
         }
 
         private bool InternalExecScript(string table, object script, out uint count)
@@ -736,14 +592,14 @@ namespace JHWork.DataMigration.DBMS.MySQL
                     bulk.Columns.AddRange(obj.Fields);
 
                     count = (uint)bulk.Load();
-                    if (count != obj.Count) errMsg = $"{table}：写入记录数错误！应写入 {obj.Count}，实际写入 {count}。";
+                    if (count != obj.Count) LastError = $"{table}：写入记录数错误！应写入 {obj.Count}，实际写入 {count}。";
 
                     return count == obj.Count;
                 }
                 catch (Exception ex)
                 {
-                    errMsg = $"{table}：{ex.Message}";
-                    Logger.WriteLogExcept(title, ex);
+                    LastError = $"{table}：{ex.Message}";
+                    Logger.WriteLogExcept(LogTitle, ex);
                 }
             }
             else if (script is MergeScript ms)
@@ -834,7 +690,11 @@ namespace JHWork.DataMigration.DBMS.MySQL
         {
             try
             {
-                MySqlCommand cmd = new MySqlCommand(sql, conn, trans);
+                MySqlCommand cmd = new MySqlCommand(sql, conn, trans)
+                {
+                    CommandTimeout = (int)Timeout,
+                    CommandType = CommandType.Text
+                };
 
                 if (parms != null)
                     foreach (string key in parms.Keys)
@@ -846,9 +706,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
-                Logger.WriteLog(title, sql);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
+                Logger.WriteLog(LogTitle, sql);
                 reader = null;
 
                 return false;
@@ -1057,8 +917,8 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
             catch (Exception ex)
             {
-                errMsg = ex.Message;
-                Logger.WriteLogExcept(title, ex);
+                LastError = ex.Message;
+                Logger.WriteLogExcept(LogTitle, ex);
 
                 return false;
             }
@@ -1067,13 +927,5 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 trans = null;
             }
         }
-    }
-
-    /// <summary>
-    /// 表外键信息
-    /// </summary>
-    internal class TableFK : TableInfo
-    {
-        public List<string> FKs { get; } = new List<string>(); // 外键指向表
     }
 }

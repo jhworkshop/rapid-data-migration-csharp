@@ -1,6 +1,9 @@
-﻿using Newtonsoft.Json.Linq;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text;
 
 namespace JHWork.DataMigration.Common
 {
@@ -17,88 +20,12 @@ namespace JHWork.DataMigration.Common
     }
 
     /// <summary>
-    /// 写入模式
-    /// </summary>
-    public enum WriteModes
-    {
-        Append, // 追加模式
-        Update  // 更新模式
-    }
-
-    /// <summary>
     /// 实例，多个实例并行执行。
     /// </summary>
     public class Instance
     {
         public string Name { get; set; }  // 名称
         public Task[] Tasks { get; set; } // 任务
-    }
-
-    /// <summary>
-    /// 数据表配置
-    /// </summary>
-    public class Table
-    {
-        public string SourceName { get; set; }      // 源表名
-        public string DestName { get; set; }        // 目标表名
-        public int Order { get; set; }              // 排序，从小到大
-        public uint PageSize { get; set; }          // 每批次记录数
-        public string OrderSQL { get; set; }        // 排序脚本
-        public string WhereSQL { get; set; }        // 条件脚本
-        public WriteModes WriteMode { get; set; }   // 写入模式
-        public string[] KeyFields { get; set; }     // 主键字段
-        public string[] SkipFields { get; set; }    // 跳过字段
-        public string Filter { get; set; }          // 过滤器
-        public bool KeepIdentity { get; set; }      // 保留自增值
-        public string[] SourceFields { get; set; }  // 源字段
-        public string[] DestFields { get; set; }    // 目标字段
-        public string[] References { get; set; }    // 外键表
-        public ulong Progress { get; set; }         // 进度记录数
-        public ulong Total { get; set; }            // 总记录数
-    }
-
-    /// <summary>
-    /// 数据表排序对比类
-    /// </summary>
-    public class TableComparer : IComparer<Table>
-    {
-        /// <summary>
-        /// 从小到大排序比对
-        /// </summary>
-        /// <param name="x">数据表</param>
-        /// <param name="y">数据表</param>
-        /// <returns>从小到大排序比对结果</returns>
-        public int Compare(Table x, Table y)
-        {
-            int rst = x.Order - y.Order;
-
-            if (rst == 0)
-            {
-                ulong weightX = x.Total * (uint)x.DestFields.Length, weightY = y.Total * (uint)y.DestFields.Length;
-
-                if (weightX > weightY)
-                    return -1;
-                else if (weightX < weightY)
-                    return 1;
-                else
-                    return string.Compare(x.DestName, y.DestName);
-            }
-            else
-                return rst;
-        }
-    }
-
-    /// <summary>
-    /// 任务，同一个实例的任务串行执行。
-    /// </summary>
-    public class Task
-    {
-        public string Name { get; set; }       // 名称  
-        public ulong Progress { get; set; }    // 进度记录数
-        public ulong Total { get; set; }       // 总记录数
-        public DataStates Status { get; set; } // 状态
-        public ulong StartTick { get; set; }   // 开始时间
-        public string ErrorMsg { get; set; }   // 错误信息
     }
 
     /// <summary>
@@ -167,40 +94,6 @@ namespace JHWork.DataMigration.Common
         public string Params { get; set; }          // 参数脚本
         public IntegrationTable Table { get; set; } // 表
         public uint ReadPages { get; set; }         // 每次读取数据批次数
-    }
-
-    /// <summary>
-    /// 迁移实例
-    /// 
-    /// MigrationRunner 的实例结构如下：
-    ///
-    /// MigrationInstance
-    ///   + MigrationTask[] （串行）
-    ///       + MigrationTable[][] （并行）
-    ///
-    /// 即，每个实例包含一组串行任务，每任务包含一组并行迁移表（二维数组结构用于解决表之间的依赖关系）。
-    /// </summary>
-    public class MigrationInstance : Instance { }
-
-    /// <summary>
-    /// 迁移表
-    /// </summary>
-    public class MigrationTable : Table
-    {
-        public DataStates Status { get; set; } // 状态
-    }
-
-    /// <summary>
-    /// 迁移任务，每个任务对应一组库。
-    /// </summary>
-    public class MigrationTask : Task
-    {
-        public Database Source { get; } = new Database(); // 源库
-        public Database Dest { get; } = new Database();   // 目标库
-        public string Params { get; set; }                // 参数脚本
-        public MigrationTable[][] Tables { get; set; }    // 表
-        public uint ReadPages { get; set; }               // 每次读取数据批次数
-        public uint Threads { get; set; }                 // 并行迁移表数
     }
 
     /// <summary>
@@ -280,6 +173,149 @@ namespace JHWork.DataMigration.Common
     }
 
     /// <summary>
+    /// 迁移实例
+    /// 
+    /// MigrationRunner 的实例结构如下：
+    ///
+    /// MigrationInstance
+    ///   + MigrationTask[] （串行）
+    ///       + MigrationTable[][] （并行）
+    ///
+    /// 即，每个实例包含一组串行任务，每任务包含一组并行迁移表（二维数组结构用于解决表之间的依赖关系）。
+    /// </summary>
+    public class MigrationInstance : Instance { }
+
+    /// <summary>
+    /// 迁移表
+    /// </summary>
+    public class MigrationTable : Table
+    {
+        public DataStates Status { get; set; } // 状态
+    }
+
+    /// <summary>
+    /// 迁移任务，每个任务对应一组库。
+    /// </summary>
+    public class MigrationTask : Task
+    {
+        public Database Source { get; } = new Database(); // 源库
+        public Database Dest { get; } = new Database();   // 目标库
+        public string Params { get; set; }                // 参数脚本
+        public MigrationTable[][] Tables { get; set; }    // 表
+        public uint ReadPages { get; set; }               // 每次读取数据批次数
+        public uint Threads { get; set; }                 // 并行迁移表数
+    }
+
+    /// <summary>
+    /// 执行器基类，封装一些公共方法
+    /// </summary>
+    public class RunnerBase
+    {
+        protected bool Connect(Task task, Database readerDB, out IDBMSReader reader, Database writerDB,
+            out IDBMSWriter writer)
+        {
+            reader = null;
+            writer = null;
+
+            if (readerDB != null)
+            {
+                reader = DBMSFactory.GetDBMSReaderByName(readerDB.DBMS);
+
+                if (reader == null)
+                {
+                    string errMsg = $"数据库类型 {readerDB.DBMS} 不支持！";
+
+                    Logger.WriteLog("系统", errMsg);
+                    task.ErrorMsg = errMsg;
+
+                    return false;
+                }
+
+                bool rst = reader.Connect(readerDB);
+
+                if (!rst)
+                {
+                    task.ErrorMsg = reader.LastError;
+                    return false;
+                }
+            }
+
+            if (writerDB != null)
+            {
+                writer = DBMSFactory.GetDBMSWriterByName(writerDB.DBMS);
+                if (writer == null)
+                {
+                    string errMsg = $"数据库类型 {writerDB.DBMS} 不支持！";
+
+                    Logger.WriteLog("系统", errMsg);
+                    task.ErrorMsg = errMsg;
+
+                    return false;
+                }
+
+                bool rst = writer.Connect(writerDB);
+
+                if (!rst)
+                {
+                    task.ErrorMsg = writer.LastError;
+                    return false;
+                }
+            }
+
+            return reader != null || writer != null;
+        }
+
+        protected string[] CreateThreadAction()
+        {
+            return new string[] { "read", "write" };
+        }
+
+        protected int[] CreateThreadAction(int count)
+        {
+            int[] rst = new int[count];
+
+            for (int i = 0; i < count; i++)
+                rst[i] = i + 1;
+
+            return rst;
+        }
+
+        protected string GetJValue(JObject obj, JObject inherited, string key, string prefix = "", string defValue = "")
+        {
+            if (obj.ContainsKey(key))
+                return obj[key].ToString().Trim();
+            else if (inherited != null)
+            {
+                if (!string.IsNullOrEmpty(prefix)) key = $"{prefix}.{key}";
+                if (inherited.ContainsKey(key)) return inherited[key].ToString().Trim();
+            }
+
+            return defValue;
+        }
+
+        protected JObject LoadAndDeserialize(string file)
+        {
+            return JsonConvert.DeserializeObject(File.ReadAllText(file)) as JObject;
+        }
+
+        protected void WriteFile(string file, string content)
+        {
+            try
+            {
+                using (FileStream fs = new FileStream(file, FileMode.Create))
+                {
+                    using (StreamWriter writer = new StreamWriter(fs, new UTF8Encoding(false)))
+                    {
+                        writer.Write(content);
+                        writer.Flush();
+                    }
+                }
+            }
+            catch (Exception) { }
+        }
+    }
+
+    /// <summary>
     /// 执行器工厂
     /// </summary>
     public class RunnerFactory
@@ -330,5 +366,109 @@ namespace JHWork.DataMigration.Common
         {
             return executor.GetInstanceByName(name);
         }
+    }
+
+    /// <summary>
+    /// 数据表配置
+    /// </summary>
+    public class Table
+    {
+        public string SourceFullName { get { return string.IsNullOrEmpty(SourceSchema) ? SourceName : $"{SourceSchema}.{SourceName}"; } }
+        public string SourceName { get; set; }      // 源表名
+        public string SourceSchema { get; set; }    // 源模式
+        public string DestFullName { get { return string.IsNullOrEmpty(DestSchema) ? DestName : $"{DestSchema}.{DestName}"; } }
+        public string DestName { get; set; }        // 目标表名
+        public string DestSchema { get; set; }      // 目标模式
+        public int Order { get; set; }              // 排序，从小到大
+        public uint PageSize { get; set; }          // 每批次记录数
+        public string OrderSQL { get; set; }        // 排序脚本
+        public string WhereSQL { get; set; }        // 条件脚本
+        public WriteModes WriteMode { get; set; }   // 写入模式
+        public string[] KeyFields { get; set; }     // 主键字段
+        public string[] SkipFields { get; set; }    // 跳过字段
+        public string Filter { get; set; }          // 过滤器
+        public bool KeepIdentity { get; set; }      // 保留自增值
+        public string[] SourceFields { get; set; }  // 源字段
+        public string[] DestFields { get; set; }    // 目标字段
+        public string[] References { get; set; }    // 外键表
+        public ulong Progress { get; set; }         // 进度记录数
+        public ulong Total { get; set; }            // 总记录数
+
+        public static string AnalyseName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+
+            string[] ss = name.Split(new char[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (ss.Length > 1)
+                return ss[1];
+            else
+                return name;
+        }
+
+        public static string AnalyseSchema(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+
+            string[] ss = name.Split(new char[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+
+            if (ss.Length == 1)
+                return ss[0];
+            else
+                return "";
+        }
+    }
+
+    /// <summary>
+    /// 数据表排序对比类
+    /// </summary>
+    public class TableComparer : IComparer<Table>
+    {
+        /// <summary>
+        /// 从小到大排序比对
+        /// </summary>
+        /// <param name="x">数据表</param>
+        /// <param name="y">数据表</param>
+        /// <returns>从小到大排序比对结果</returns>
+        public int Compare(Table x, Table y)
+        {
+            int rst = x.Order - y.Order;
+
+            if (rst == 0)
+            {
+                ulong weightX = x.Total * (uint)x.DestFields.Length, weightY = y.Total * (uint)y.DestFields.Length;
+
+                if (weightX > weightY)
+                    return -1;
+                else if (weightX < weightY)
+                    return 1;
+                else
+                    return string.Compare(x.DestName, y.DestName);
+            }
+            else
+                return rst;
+        }
+    }
+
+    /// <summary>
+    /// 任务，同一个实例的任务串行执行。
+    /// </summary>
+    public class Task
+    {
+        public string Name { get; set; }       // 名称  
+        public ulong Progress { get; set; }    // 进度记录数
+        public ulong Total { get; set; }       // 总记录数
+        public DataStates Status { get; set; } // 状态
+        public ulong StartTick { get; set; }   // 开始时间
+        public string ErrorMsg { get; set; }   // 错误信息
+    }
+
+    /// <summary>
+    /// 写入模式
+    /// </summary>
+    public enum WriteModes
+    {
+        Append, // 追加模式
+        Update  // 更新模式
     }
 }

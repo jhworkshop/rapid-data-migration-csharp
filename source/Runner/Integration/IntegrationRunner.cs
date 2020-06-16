@@ -4,8 +4,6 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,7 +20,7 @@ namespace JHWork.DataMigration.Runner.Integration
     /// <summary>
     /// 汇集执行器
     /// </summary>
-    public class IntegrationRunner : IAssemblyLoader, IRunnerAnalyzer, IRunnerExecutor, IRunnerAssistant
+    public class IntegrationRunner : RunnerBase, IAssemblyLoader, IRunnerAnalyzer, IRunnerExecutor, IRunnerAssistant
     {
         private IStopStatus status;
 
@@ -34,11 +32,13 @@ namespace JHWork.DataMigration.Runner.Integration
                 Server = GetJValue(obj, inherited, "server", "dest"),
                 Port = uint.Parse(GetJValue(obj, inherited, "port", "dest")),
                 DB = GetJValue(obj, inherited, "db", "dest"),
+                Schema = GetJValue(obj, inherited, "schema", "dest"),
                 User = GetJValue(obj, inherited, "user", "dest"),
                 Pwd = GetJValue(obj, inherited, "password", "dest"),
                 CharSet = GetJValue(obj, inherited, "charset", "dest", "utf8"),
                 Encrypt = int.Parse(GetJValue(obj, inherited, "encrypt", "dest", "0")) != 0,
-                Compress = int.Parse(GetJValue(obj, inherited, "compress", "dest", "0")) != 0
+                Compress = int.Parse(GetJValue(obj, inherited, "compress", "dest", "0")) != 0,
+                Timeout = uint.Parse(GetJValue(obj, inherited, "timeout", "dest", "60"))
             };
         }
 
@@ -51,18 +51,24 @@ namespace JHWork.DataMigration.Runner.Integration
                 JArray dbs = obj["dbs"] as JArray;
 
                 foreach (JToken db in dbs)
+                {
+                    string schema = Database.AnalyseSchema(db.ToString());
+
                     lst.Add(new Database()
                     {
                         DBMS = GetJValue(obj, inherited, "dbms", "source"),
                         Server = GetJValue(obj, inherited, "server", "source"),
                         Port = uint.Parse(GetJValue(obj, inherited, "port", "source")),
-                        DB = db.ToString(),
+                        DB = Database.AnalyseDB(db.ToString()),
+                        Schema = string.IsNullOrEmpty(schema) ? GetJValue(obj, inherited, "schema", "source") : schema,
                         User = GetJValue(obj, inherited, "user", "source"),
                         Pwd = GetJValue(obj, inherited, "password", "source"),
                         CharSet = GetJValue(obj, inherited, "charset", "source", "utf8"),
                         Encrypt = int.Parse(GetJValue(obj, inherited, "encrypt", "source", "0")) != 0,
-                        Compress = int.Parse(GetJValue(obj, inherited, "compress", "source", "0")) != 0
+                        Compress = int.Parse(GetJValue(obj, inherited, "compress", "source", "0")) != 0,
+                        Timeout = uint.Parse(GetJValue(obj, inherited, "timeout", "source", "60"))
                     });
+                }
             }
 
             return lst.ToArray();
@@ -138,8 +144,10 @@ namespace JHWork.DataMigration.Runner.Integration
                 string[] names = o["name"].ToString().Split(',');
                 IntegrationTable table = new IntegrationTable()
                 {
-                    SourceName = names[0],
-                    DestName = names.Length > 1 ? names[1] : names[0],
+                    SourceName = Table.AnalyseName(names[0]),
+                    SourceSchema = Table.AnalyseSchema(names[0]),
+                    DestName = Table.AnalyseName(names.Length > 1 ? names[1] : names[0]),
+                    DestSchema = Table.AnalyseSchema(names.Length > 1 ? names[1] : names[0]),
                     Order = int.Parse(o["order"].ToString()),
                     OrderSQL = o["orderSQL"].ToString(),
                     WhereSQL = o["whereSQL"].ToString(),
@@ -195,79 +203,6 @@ namespace JHWork.DataMigration.Runner.Integration
             }
             else
                 return new IntegrationTable[][] { };
-        }
-
-        private bool Connect(Common.Task task, Database db, out IDBMSReader reader)
-        {
-            reader = DBMSFactory.GetDBMSReaderByName(db.DBMS);
-            if (reader == null)
-            {
-                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
-
-                Logger.WriteLog("系统", errMsg);
-                task.ErrorMsg = errMsg;
-
-                return false;
-            }
-            else
-            {
-                bool rst = reader.Connect(db);
-
-                if (!rst) task.ErrorMsg = reader.GetLastError();
-
-                return rst;
-            }
-        }
-
-        private bool Connect(Common.Task task, Database db, out IDBMSWriter writer)
-        {
-            writer = DBMSFactory.GetDBMSWriterByName(db.DBMS);
-            if (writer == null)
-            {
-                string errMsg = $"数据库类型 {db.DBMS} 不支持！";
-
-                Logger.WriteLog("系统", errMsg);
-                task.ErrorMsg = errMsg;
-
-                return false;
-            }
-            else
-            {
-                bool rst = writer.Connect(db);
-
-                if (!rst) task.ErrorMsg = writer.GetLastError();
-
-                return rst;
-            }
-        }
-
-
-        private static string[] CreateThreadAction()
-        {
-            return new string[] { "read", "write" };
-        }
-
-        private int[] CreateThreadAction(int count)
-        {
-            int[] rst = new int[count];
-
-            for (int i = 0; i < count; i++)
-                rst[i] = i + 1;
-
-            return rst;
-        }
-
-        private void DuplicateDatabase(Database source, Database dest)
-        {
-            dest.DBMS = source.DBMS;
-            dest.Server = source.Server;
-            dest.Port = source.Port;
-            dest.DB = source.DB;
-            dest.User = source.User;
-            dest.Pwd = source.Pwd;
-            dest.CharSet = source.CharSet;
-            dest.Encrypt = source.Encrypt;
-            dest.Compress = source.Compress;
         }
 
         public void Execute(Instance ins, IStopStatus status)
@@ -362,19 +297,6 @@ namespace JHWork.DataMigration.Runner.Integration
             }
         }
 
-        private string GetJValue(JObject obj, JObject inherited, string key, string prefix = "", string defValue = "")
-        {
-            if (obj.ContainsKey(key))
-                return obj[key].ToString();
-            else if (inherited != null)
-            {
-                if (!string.IsNullOrEmpty(prefix)) key = $"{prefix}.{key}";
-                if (inherited.ContainsKey(key)) return inherited[key].ToString();
-            }
-
-            return defValue;
-        }
-
         public string GetName()
         {
             return "Integration";
@@ -465,7 +387,7 @@ namespace JHWork.DataMigration.Runner.Integration
             reason = "取消操作";
             if (status.Stopped) return;
 
-            if (Connect(task, task.Dest, out IDBMSWriter dest))
+            if (Connect(task, null, out _, task.Dest, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -523,7 +445,7 @@ namespace JHWork.DataMigration.Runner.Integration
                             Dictionary<string, object> tmpParams = new Dictionary<string, object>(parms);
 
                             // 连接数据源
-                            if (!Connect(task, db, out IDBMSReader source))
+                            if (!Connect(task, db, out IDBMSReader source, null, out _))
                             {
                                 task.Status = DataStates.RunningError;
                                 reason = task.ErrorMsg;
@@ -560,7 +482,7 @@ namespace JHWork.DataMigration.Runner.Integration
                                 else
                                 {
                                     task.Status = DataStates.RunningError;
-                                    reason = source.GetLastError();
+                                    reason = source.LastError;
                                     break;
                                 }
 
@@ -582,7 +504,7 @@ namespace JHWork.DataMigration.Runner.Integration
                                 if (!dest.ExecScript(task.Table, script, out uint r))
                                 {
                                     task.Status = DataStates.Error;
-                                    reason = dest.GetLastError();
+                                    reason = dest.LastError;
                                     break;
                                 }
 
@@ -615,17 +537,12 @@ namespace JHWork.DataMigration.Runner.Integration
             }
         }
 
-        private JObject LoadAndDeserialize(string file)
-        {
-            return JsonConvert.DeserializeObject(File.ReadAllText(file)) as JObject;
-        }
-
         public void LoadSample(Instance ins, Database source, Database dest, List<Table> tables, out string param)
         {
             if (ins.Tasks[0] is IntegrationTask task)
             {
-                DuplicateDatabase(task.Sources[0], source);
-                DuplicateDatabase(task.Dest, dest);
+                source.Duplicate(task.Sources[0]);
+                dest.Duplicate(task.Dest);
                 param = task.Params;
             }
             else
@@ -651,13 +568,13 @@ namespace JHWork.DataMigration.Runner.Integration
                     task.Table.Total = 0;
                     task.Table.Progress = 0;
 
-                    if (Connect(task, task.Dest, out IDBMSWriter dest))
+                    if (Connect(task, null, out _, task.Dest, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
                         if (!dest.QueryParam(task.Params, parms))
                         {
-                            task.ErrorMsg = dest.GetLastError();
+                            task.ErrorMsg = dest.LastError;
                             break;
                         }
 
@@ -669,44 +586,45 @@ namespace JHWork.DataMigration.Runner.Integration
 
                                 foreach (Database db in task.Sources)
                                 {
-                                    if (task.Status != DataStates.Error && !status.Stopped)
-                                        if (Connect(task, db, out source))
+                                    if (task.Status == DataStates.Error || status.Stopped) break;
+
+                                    if (Connect(task, db, out source, null, out _))
+                                    {
+                                        bool isError = true;
+
+                                        // #1: 检查表存在，并缓存字段
+                                        if (source.GetFieldNames(task.Table.SourceName, task.Table.SourceSchema, out string[] fields))
                                         {
-                                            bool isError = true;
+                                            task.Table.SourceFields = fields;
 
-                                            // #1: 检查表存在，并缓存字段
-                                            if (source.GetFieldNames(task.Table.SourceName, out string[] fields))
+                                            // #2: 获取记录数
+                                            if (source.QueryCount(task.Table, WithEnums.NoLock, parms, out ulong count))
                                             {
-                                                task.Table.SourceFields = fields;
-
-                                                // #2: 获取记录数
-                                                if (source.QueryCount(task.Table, WithEnums.NoLock, parms, out ulong count))
-                                                {
-                                                    task.Total += count;
-                                                    task.Table.Total += count;
-                                                    isError = false;
-                                                }
+                                                task.Total += count;
+                                                task.Table.Total += count;
+                                                isError = false;
                                             }
-
-                                            if (isError)
-                                            {
-                                                task.Status = DataStates.Error;
-                                                task.ErrorMsg = source.GetLastError();
-                                            }
-                                            source.Close();
                                         }
-                                        else
+
+                                        if (isError)
+                                        {
                                             task.Status = DataStates.Error;
+                                            task.ErrorMsg = source.LastError;
+                                        }
+                                        source.Close();
+                                    }
+                                    else
+                                        task.Status = DataStates.Error;
                                 }
                             }
                             else if ("write".Equals(act))
                             {
-                                if (dest.GetFieldNames(task.Table.DestName, out string[] fields))
+                                if (dest.GetFieldNames(task.Table.DestName, task.Table.DestSchema, out string[] fields))
                                     task.Table.DestFields = fields;
                                 else
                                 {
                                     task.Status = DataStates.Error;
-                                    task.ErrorMsg = dest.GetLastError();
+                                    task.ErrorMsg = dest.LastError;
                                 }
                                 dest.Close();
                             }
@@ -743,7 +661,7 @@ namespace JHWork.DataMigration.Runner.Integration
             {
                 JObject obj = new JObject()
                 {
-                    ["name"] = t.SourceName.Equals(t.DestName) ? t.SourceName : $"{t.SourceName},{t.DestName}",
+                    ["name"] = t.SourceFullName.Equals(t.DestFullName) ? t.SourceFullName : $"{t.SourceFullName},{t.DestFullName}",
                     ["order"] = t.Order,
                     ["orderSQL"] = t.OrderSQL,
                     ["whereSQL"] = t.WhereSQL,
@@ -773,9 +691,13 @@ namespace JHWork.DataMigration.Runner.Integration
                 ["server"] = source.Server,
                 ["port"] = source.Port,
                 ["db"] = source.DB,
+                ["schema"] = source.Schema,
                 ["user"] = source.User,
                 ["password"] = source.Pwd,
-                ["charset"] = source.CharSet
+                ["charset"] = source.CharSet,
+                ["encrypt"] = source.Encrypt,
+                ["compress"] = source.Compress,
+                ["timeout"] = source.Timeout
             };
             JArray sourceArray = new JArray() { srcDB };
             JObject dstDB = new JObject()
@@ -784,9 +706,13 @@ namespace JHWork.DataMigration.Runner.Integration
                 ["server"] = dest.Server,
                 ["port"] = dest.Port,
                 ["db"] = dest.DB,
+                ["schema"] = dest.Schema,
                 ["user"] = dest.User,
                 ["password"] = dest.Pwd,
-                ["charset"] = dest.CharSet
+                ["charset"] = dest.CharSet,
+                ["encrypt"] = dest.Encrypt,
+                ["compress"] = dest.Compress,
+                ["timeout"] = dest.Timeout
             };
             JObject instance = new JObject()
             {
@@ -808,22 +734,6 @@ namespace JHWork.DataMigration.Runner.Integration
             };
 
             WriteFile($"{path}Profile-{file}", JsonConvert.SerializeObject(profileData, Formatting.Indented));
-        }
-
-        private void WriteFile(string file, string content)
-        {
-            try
-            {
-                using (FileStream fs = new FileStream(file, FileMode.Create))
-                {
-                    using (StreamWriter writer = new StreamWriter(fs, new UTF8Encoding(false)))
-                    {
-                        writer.Write(content);
-                        writer.Flush();
-                    }
-                }
-            }
-            catch (Exception) { }
         }
     }
 

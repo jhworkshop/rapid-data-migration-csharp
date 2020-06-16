@@ -3,21 +3,6 @@
 namespace JHWork.DataMigration.Common
 {
     /// <summary>
-    /// 数据过滤器接口，当目标表与源表字段不是简单一一对应时，可用数据过滤器做数据转换
-    /// </summary>
-    public interface IDataFilter
-    {
-        /// <summary>
-        /// 获取原始字段值
-        /// </summary>
-        /// <param name="data">数据</param>
-        /// <param name="fieldIndex">字段索引</param>
-        /// <param name="fieldName">字段名称</param>
-        /// <returns>原始字段值</returns>
-        object GetValue(IDataWrapper data, int fieldIndex, string fieldName);
-    }
-
-    /// <summary>
     /// 默认过滤器
     /// </summary>
     public class DefaultDataFilter : IDataFilter
@@ -56,5 +41,20 @@ namespace JHWork.DataMigration.Common
             else
                 return dataFilter;
         }
+    }
+
+    /// <summary>
+    /// 数据过滤器接口，当目标表与源表字段不是简单一一对应时，可用数据过滤器做数据转换
+    /// </summary>
+    public interface IDataFilter
+    {
+        /// <summary>
+        /// 获取原始字段值
+        /// </summary>
+        /// <param name="data">数据</param>
+        /// <param name="fieldIndex">字段索引</param>
+        /// <param name="fieldName">字段名称</param>
+        /// <returns>原始字段值</returns>
+        object GetValue(IDataWrapper data, int fieldIndex, string fieldName);
     }
 }

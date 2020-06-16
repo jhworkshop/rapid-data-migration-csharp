@@ -6,18 +6,6 @@ using System.Reflection;
 namespace JHWork.DataMigration.Common
 {
     /// <summary>
-    /// 程序集加载器接口，用于识别动态加载程序集
-    /// </summary>
-    public interface IAssemblyLoader
-    {
-        /// <summary>
-        /// 获取程序集名称，用于识别及显示
-        /// </summary>
-        /// <returns>程序集名称，不区分大小写</returns>
-        string GetName();
-    }
-
-    /// <summary>
     /// 程序集信息
     /// </summary>
     internal class AssemblyInfo
@@ -50,13 +38,14 @@ namespace JHWork.DataMigration.Common
                     if (!BlackList.Contains(file))
                         try
                         {
-                            Assembly asm = Assembly.LoadFrom(file);
+                            Assembly asm = Assembly.LoadFrom(file); // 同一个文件返回同一个程序集对象
 
                             foreach (Type t in asm.ExportedTypes)
                                 if (t.GetInterface("IAssemblyLoader") != null && t.GetInterface(intfName) != null)
                                     if (asm.CreateInstance(t.FullName, true) is IAssemblyLoader loader)
                                         lst.Add(loader.GetName().ToLower(),
-                                            new AssemblyInfo() {
+                                            new AssemblyInfo()
+                                            {
                                                 Asm = asm,
                                                 Name = t.FullName,
                                                 DisplayName = loader.GetName()
@@ -121,5 +110,17 @@ namespace JHWork.DataMigration.Common
         {
             return lst.Contains(s);
         }
+    }
+
+    /// <summary>
+    /// 程序集加载器接口，用于识别动态加载程序集
+    /// </summary>
+    public interface IAssemblyLoader
+    {
+        /// <summary>
+        /// 获取程序集名称，用于识别及显示
+        /// </summary>
+        /// <returns>程序集名称，不区分大小写</returns>
+        string GetName();
     }
 }

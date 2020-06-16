@@ -220,11 +220,11 @@ namespace JHWork.DataMigration
                     else
                         item.SubItems[3].Text = $"{task.Progress * 100.0 / task.Total:0.0}%";
                     if (task.StartTick == 0)
-                        item.SubItems[4].Text = "0.0";
+                        item.SubItems[4].Text = "00:00:00.0";
                     else if (task.Status == DataStates.Running || task.Status == DataStates.RunningError)
-                        item.SubItems[4].Text = ((WinAPI.GetTickCount() - task.StartTick) / 1000.0).ToString("#,##0.0");
+                        item.SubItems[4].Text = TickToTime(WinAPI.GetTickCount() - task.StartTick);
                     else
-                        item.SubItems[4].Text = (task.StartTick / 1000.0).ToString("#,##0.0");
+                        item.SubItems[4].Text = TickToTime(task.StartTick);
                     item.StateImageIndex = DetermineImageIndex(task.Status);
                     if (task.Status == DataStates.Error || task.Status == DataStates.RunningError)
                         item.ToolTipText = task.ErrorMsg;
@@ -253,6 +253,25 @@ namespace JHWork.DataMigration
                 else
                     statusBarLabel3.Text = "就绪";
             }
+        }
+
+        private string TickToTime(ulong tick)
+        {
+            ulong h = tick / 3600000;
+
+            tick %= 3600000;
+
+            ulong m = tick / 60000;
+
+            tick %= 60000;
+
+            ulong s = tick / 1000;
+
+            tick %= 1000;
+
+            ulong ms = tick / 100;
+
+            return $"{h:00}:{m:00}:{s:00}.{ms}";
         }
 
         private void Timer_Tick(object sender, EventArgs e)

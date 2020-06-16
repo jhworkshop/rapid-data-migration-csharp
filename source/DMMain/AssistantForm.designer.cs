@@ -50,7 +50,6 @@
             this.label10 = new System.Windows.Forms.Label();
             this.label11 = new System.Windows.Forms.Label();
             this.label12 = new System.Windows.Forms.Label();
-            this.label13 = new System.Windows.Forms.Label();
             this.label14 = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.sourceEncrypt = new System.Windows.Forms.CheckBox();
@@ -67,7 +66,6 @@
             this.label5 = new System.Windows.Forms.Label();
             this.label4 = new System.Windows.Forms.Label();
             this.label3 = new System.Windows.Forms.Label();
-            this.label2 = new System.Windows.Forms.Label();
             this.label1 = new System.Windows.Forms.Label();
             this.tabPage2 = new System.Windows.Forms.TabPage();
             this.btnReverse = new System.Windows.Forms.Button();
@@ -84,6 +82,12 @@
             this.saveDialog = new System.Windows.Forms.SaveFileDialog();
             this.progressLabel = new System.Windows.Forms.Label();
             this.progressBar = new System.Windows.Forms.ProgressBar();
+            this.sourceSchema = new System.Windows.Forms.TextBox();
+            this.destSchema = new System.Windows.Forms.TextBox();
+            this.label2 = new System.Windows.Forms.Label();
+            this.sourceTimeout = new System.Windows.Forms.TextBox();
+            this.destTimeout = new System.Windows.Forms.TextBox();
+            this.label13 = new System.Windows.Forms.Label();
             this.tabControl1.SuspendLayout();
             this.tabPage3.SuspendLayout();
             this.tabPage1.SuspendLayout();
@@ -101,7 +105,7 @@
             this.tabControl1.Location = new System.Drawing.Point(8, 8);
             this.tabControl1.Name = "tabControl1";
             this.tabControl1.SelectedIndex = 0;
-            this.tabControl1.Size = new System.Drawing.Size(661, 361);
+            this.tabControl1.Size = new System.Drawing.Size(661, 326);
             this.tabControl1.TabIndex = 0;
             // 
             // tabPage3
@@ -142,13 +146,16 @@
             this.tabPage1.Location = new System.Drawing.Point(4, 31);
             this.tabPage1.Name = "tabPage1";
             this.tabPage1.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage1.Size = new System.Drawing.Size(653, 326);
+            this.tabPage1.Size = new System.Drawing.Size(653, 291);
             this.tabPage1.TabIndex = 0;
             this.tabPage1.Text = "数据源";
             this.tabPage1.UseVisualStyleBackColor = true;
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.destTimeout);
+            this.groupBox2.Controls.Add(this.label13);
+            this.groupBox2.Controls.Add(this.destSchema);
             this.groupBox2.Controls.Add(this.destEncrypt);
             this.groupBox2.Controls.Add(this.destCompress);
             this.groupBox2.Controls.Add(this.destCharSet);
@@ -163,11 +170,10 @@
             this.groupBox2.Controls.Add(this.label10);
             this.groupBox2.Controls.Add(this.label11);
             this.groupBox2.Controls.Add(this.label12);
-            this.groupBox2.Controls.Add(this.label13);
             this.groupBox2.Controls.Add(this.label14);
             this.groupBox2.Location = new System.Drawing.Point(332, 16);
             this.groupBox2.Name = "groupBox2";
-            this.groupBox2.Size = new System.Drawing.Size(300, 289);
+            this.groupBox2.Size = new System.Drawing.Size(300, 257);
             this.groupBox2.TabIndex = 1;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = " 目标 ";
@@ -175,7 +181,7 @@
             // destEncrypt
             // 
             this.destEncrypt.AutoSize = true;
-            this.destEncrypt.Location = new System.Drawing.Point(149, 256);
+            this.destEncrypt.Location = new System.Drawing.Point(157, 223);
             this.destEncrypt.Name = "destEncrypt";
             this.destEncrypt.Size = new System.Drawing.Size(75, 21);
             this.destEncrypt.TabIndex = 17;
@@ -185,7 +191,7 @@
             // destCompress
             // 
             this.destCompress.AutoSize = true;
-            this.destCompress.Location = new System.Drawing.Point(19, 256);
+            this.destCompress.Location = new System.Drawing.Point(19, 223);
             this.destCompress.Name = "destCompress";
             this.destCompress.Size = new System.Drawing.Size(75, 21);
             this.destCompress.TabIndex = 16;
@@ -195,44 +201,44 @@
             // destCharSet
             // 
             this.destCharSet.FormattingEnabled = true;
-            this.destCharSet.Location = new System.Drawing.Point(81, 221);
+            this.destCharSet.Location = new System.Drawing.Point(81, 189);
             this.destCharSet.Name = "destCharSet";
-            this.destCharSet.Size = new System.Drawing.Size(200, 25);
-            this.destCharSet.TabIndex = 13;
+            this.destCharSet.Size = new System.Drawing.Size(64, 25);
+            this.destCharSet.TabIndex = 14;
             // 
             // destPwd
             // 
-            this.destPwd.Location = new System.Drawing.Point(81, 189);
+            this.destPwd.Location = new System.Drawing.Point(81, 157);
             this.destPwd.Name = "destPwd";
             this.destPwd.Size = new System.Drawing.Size(200, 23);
-            this.destPwd.TabIndex = 12;
+            this.destPwd.TabIndex = 13;
             // 
             // destUser
             // 
-            this.destUser.Location = new System.Drawing.Point(81, 157);
+            this.destUser.Location = new System.Drawing.Point(81, 125);
             this.destUser.Name = "destUser";
-            this.destUser.Size = new System.Drawing.Size(200, 23);
+            this.destUser.Size = new System.Drawing.Size(143, 23);
             this.destUser.TabIndex = 11;
             // 
             // destDB
             // 
-            this.destDB.Location = new System.Drawing.Point(81, 125);
+            this.destDB.Location = new System.Drawing.Point(81, 93);
             this.destDB.Name = "destDB";
             this.destDB.Size = new System.Drawing.Size(200, 23);
             this.destDB.TabIndex = 10;
             // 
             // destPort
             // 
-            this.destPort.Location = new System.Drawing.Point(81, 93);
+            this.destPort.Location = new System.Drawing.Point(230, 61);
             this.destPort.Name = "destPort";
-            this.destPort.Size = new System.Drawing.Size(200, 23);
+            this.destPort.Size = new System.Drawing.Size(51, 23);
             this.destPort.TabIndex = 9;
             // 
             // destServer
             // 
             this.destServer.Location = new System.Drawing.Point(81, 61);
             this.destServer.Name = "destServer";
-            this.destServer.Size = new System.Drawing.Size(200, 23);
+            this.destServer.Size = new System.Drawing.Size(143, 23);
             this.destServer.TabIndex = 8;
             // 
             // destDBMS
@@ -243,11 +249,12 @@
             this.destDBMS.Name = "destDBMS";
             this.destDBMS.Size = new System.Drawing.Size(200, 25);
             this.destDBMS.TabIndex = 7;
+            this.destDBMS.SelectedIndexChanged += new System.EventHandler(this.DBMS_SelectedIndexChanged);
             // 
             // label8
             // 
             this.label8.AutoSize = true;
-            this.label8.Location = new System.Drawing.Point(16, 224);
+            this.label8.Location = new System.Drawing.Point(16, 192);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(56, 17);
             this.label8.TabIndex = 6;
@@ -256,7 +263,7 @@
             // label9
             // 
             this.label9.AutoSize = true;
-            this.label9.Location = new System.Drawing.Point(16, 128);
+            this.label9.Location = new System.Drawing.Point(16, 96);
             this.label9.Name = "label9";
             this.label9.Size = new System.Drawing.Size(56, 17);
             this.label9.TabIndex = 5;
@@ -274,7 +281,7 @@
             // label11
             // 
             this.label11.AutoSize = true;
-            this.label11.Location = new System.Drawing.Point(16, 192);
+            this.label11.Location = new System.Drawing.Point(16, 160);
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(44, 17);
             this.label11.TabIndex = 3;
@@ -283,32 +290,26 @@
             // label12
             // 
             this.label12.AutoSize = true;
-            this.label12.Location = new System.Drawing.Point(16, 160);
+            this.label12.Location = new System.Drawing.Point(16, 128);
             this.label12.Name = "label12";
-            this.label12.Size = new System.Drawing.Size(56, 17);
+            this.label12.Size = new System.Drawing.Size(68, 17);
             this.label12.TabIndex = 2;
-            this.label12.Text = "用户名：";
-            // 
-            // label13
-            // 
-            this.label13.AutoSize = true;
-            this.label13.Location = new System.Drawing.Point(16, 96);
-            this.label13.Name = "label13";
-            this.label13.Size = new System.Drawing.Size(56, 17);
-            this.label13.TabIndex = 1;
-            this.label13.Text = "端口号：";
+            this.label12.Text = "用户模式：";
             // 
             // label14
             // 
             this.label14.AutoSize = true;
             this.label14.Location = new System.Drawing.Point(16, 64);
             this.label14.Name = "label14";
-            this.label14.Size = new System.Drawing.Size(56, 17);
+            this.label14.Size = new System.Drawing.Size(68, 17);
             this.label14.TabIndex = 0;
-            this.label14.Text = "服务器：";
+            this.label14.Text = "地址端口：";
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.sourceTimeout);
+            this.groupBox1.Controls.Add(this.label2);
+            this.groupBox1.Controls.Add(this.sourceSchema);
             this.groupBox1.Controls.Add(this.sourceEncrypt);
             this.groupBox1.Controls.Add(this.sourceCompress);
             this.groupBox1.Controls.Add(this.sourceCharSet);
@@ -323,11 +324,10 @@
             this.groupBox1.Controls.Add(this.label5);
             this.groupBox1.Controls.Add(this.label4);
             this.groupBox1.Controls.Add(this.label3);
-            this.groupBox1.Controls.Add(this.label2);
             this.groupBox1.Controls.Add(this.label1);
             this.groupBox1.Location = new System.Drawing.Point(16, 16);
             this.groupBox1.Name = "groupBox1";
-            this.groupBox1.Size = new System.Drawing.Size(300, 289);
+            this.groupBox1.Size = new System.Drawing.Size(300, 257);
             this.groupBox1.TabIndex = 0;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = " 源 ";
@@ -335,64 +335,64 @@
             // sourceEncrypt
             // 
             this.sourceEncrypt.AutoSize = true;
-            this.sourceEncrypt.Location = new System.Drawing.Point(149, 256);
+            this.sourceEncrypt.Location = new System.Drawing.Point(157, 223);
             this.sourceEncrypt.Name = "sourceEncrypt";
             this.sourceEncrypt.Size = new System.Drawing.Size(75, 21);
-            this.sourceEncrypt.TabIndex = 15;
+            this.sourceEncrypt.TabIndex = 17;
             this.sourceEncrypt.Text = "加密传输";
             this.sourceEncrypt.UseVisualStyleBackColor = true;
             // 
             // sourceCompress
             // 
             this.sourceCompress.AutoSize = true;
-            this.sourceCompress.Location = new System.Drawing.Point(19, 256);
+            this.sourceCompress.Location = new System.Drawing.Point(19, 223);
             this.sourceCompress.Name = "sourceCompress";
             this.sourceCompress.Size = new System.Drawing.Size(75, 21);
-            this.sourceCompress.TabIndex = 14;
+            this.sourceCompress.TabIndex = 16;
             this.sourceCompress.Text = "压缩传输";
             this.sourceCompress.UseVisualStyleBackColor = true;
             // 
             // sourceCharSet
             // 
             this.sourceCharSet.FormattingEnabled = true;
-            this.sourceCharSet.Location = new System.Drawing.Point(81, 221);
+            this.sourceCharSet.Location = new System.Drawing.Point(81, 189);
             this.sourceCharSet.Name = "sourceCharSet";
-            this.sourceCharSet.Size = new System.Drawing.Size(200, 25);
-            this.sourceCharSet.TabIndex = 13;
+            this.sourceCharSet.Size = new System.Drawing.Size(64, 25);
+            this.sourceCharSet.TabIndex = 14;
             // 
             // sourcePwd
             // 
-            this.sourcePwd.Location = new System.Drawing.Point(81, 189);
+            this.sourcePwd.Location = new System.Drawing.Point(81, 157);
             this.sourcePwd.Name = "sourcePwd";
             this.sourcePwd.Size = new System.Drawing.Size(200, 23);
-            this.sourcePwd.TabIndex = 12;
+            this.sourcePwd.TabIndex = 13;
             // 
             // sourceUser
             // 
-            this.sourceUser.Location = new System.Drawing.Point(81, 157);
+            this.sourceUser.Location = new System.Drawing.Point(81, 125);
             this.sourceUser.Name = "sourceUser";
-            this.sourceUser.Size = new System.Drawing.Size(200, 23);
+            this.sourceUser.Size = new System.Drawing.Size(143, 23);
             this.sourceUser.TabIndex = 11;
             // 
             // sourceDB
             // 
-            this.sourceDB.Location = new System.Drawing.Point(81, 125);
+            this.sourceDB.Location = new System.Drawing.Point(81, 93);
             this.sourceDB.Name = "sourceDB";
             this.sourceDB.Size = new System.Drawing.Size(200, 23);
             this.sourceDB.TabIndex = 10;
             // 
             // sourcePort
             // 
-            this.sourcePort.Location = new System.Drawing.Point(81, 93);
+            this.sourcePort.Location = new System.Drawing.Point(230, 61);
             this.sourcePort.Name = "sourcePort";
-            this.sourcePort.Size = new System.Drawing.Size(200, 23);
+            this.sourcePort.Size = new System.Drawing.Size(51, 23);
             this.sourcePort.TabIndex = 9;
             // 
             // sourceServer
             // 
             this.sourceServer.Location = new System.Drawing.Point(81, 61);
             this.sourceServer.Name = "sourceServer";
-            this.sourceServer.Size = new System.Drawing.Size(200, 23);
+            this.sourceServer.Size = new System.Drawing.Size(143, 23);
             this.sourceServer.TabIndex = 8;
             // 
             // sourceDBMS
@@ -403,11 +403,12 @@
             this.sourceDBMS.Name = "sourceDBMS";
             this.sourceDBMS.Size = new System.Drawing.Size(200, 25);
             this.sourceDBMS.TabIndex = 7;
+            this.sourceDBMS.SelectedIndexChanged += new System.EventHandler(this.DBMS_SelectedIndexChanged);
             // 
             // label7
             // 
             this.label7.AutoSize = true;
-            this.label7.Location = new System.Drawing.Point(16, 224);
+            this.label7.Location = new System.Drawing.Point(16, 192);
             this.label7.Name = "label7";
             this.label7.Size = new System.Drawing.Size(56, 17);
             this.label7.TabIndex = 6;
@@ -416,7 +417,7 @@
             // label6
             // 
             this.label6.AutoSize = true;
-            this.label6.Location = new System.Drawing.Point(16, 128);
+            this.label6.Location = new System.Drawing.Point(16, 96);
             this.label6.Name = "label6";
             this.label6.Size = new System.Drawing.Size(56, 17);
             this.label6.TabIndex = 5;
@@ -434,7 +435,7 @@
             // label4
             // 
             this.label4.AutoSize = true;
-            this.label4.Location = new System.Drawing.Point(16, 192);
+            this.label4.Location = new System.Drawing.Point(16, 160);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(44, 17);
             this.label4.TabIndex = 3;
@@ -443,29 +444,20 @@
             // label3
             // 
             this.label3.AutoSize = true;
-            this.label3.Location = new System.Drawing.Point(16, 160);
+            this.label3.Location = new System.Drawing.Point(16, 128);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(56, 17);
+            this.label3.Size = new System.Drawing.Size(68, 17);
             this.label3.TabIndex = 2;
-            this.label3.Text = "用户名：";
-            // 
-            // label2
-            // 
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(16, 96);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(56, 17);
-            this.label2.TabIndex = 1;
-            this.label2.Text = "端口号：";
+            this.label3.Text = "用户模式：";
             // 
             // label1
             // 
             this.label1.AutoSize = true;
             this.label1.Location = new System.Drawing.Point(16, 64);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(56, 17);
+            this.label1.Size = new System.Drawing.Size(68, 17);
             this.label1.TabIndex = 0;
-            this.label1.Text = "服务器：";
+            this.label1.Text = "地址端口：";
             // 
             // tabPage2
             // 
@@ -477,7 +469,7 @@
             this.tabPage2.Location = new System.Drawing.Point(4, 31);
             this.tabPage2.Name = "tabPage2";
             this.tabPage2.Padding = new System.Windows.Forms.Padding(3);
-            this.tabPage2.Size = new System.Drawing.Size(653, 326);
+            this.tabPage2.Size = new System.Drawing.Size(653, 291);
             this.tabPage2.TabIndex = 1;
             this.tabPage2.Text = "数据表";
             this.tabPage2.UseVisualStyleBackColor = true;
@@ -525,7 +517,7 @@
             this.listView.Location = new System.Drawing.Point(16, 16);
             this.listView.MultiSelect = false;
             this.listView.Name = "listView";
-            this.listView.Size = new System.Drawing.Size(530, 293);
+            this.listView.Size = new System.Drawing.Size(530, 258);
             this.listView.SmallImageList = this.imageList;
             this.listView.TabIndex = 0;
             this.listView.UseCompatibleStateImageBehavior = false;
@@ -557,7 +549,7 @@
             // 
             // btnImport
             // 
-            this.btnImport.Location = new System.Drawing.Point(499, 380);
+            this.btnImport.Location = new System.Drawing.Point(499, 343);
             this.btnImport.Name = "btnImport";
             this.btnImport.Size = new System.Drawing.Size(75, 25);
             this.btnImport.TabIndex = 1;
@@ -567,7 +559,7 @@
             // 
             // btnSave
             // 
-            this.btnSave.Location = new System.Drawing.Point(590, 380);
+            this.btnSave.Location = new System.Drawing.Point(590, 343);
             this.btnSave.Name = "btnSave";
             this.btnSave.Size = new System.Drawing.Size(75, 25);
             this.btnSave.TabIndex = 2;
@@ -589,7 +581,7 @@
             // progressLabel
             // 
             this.progressLabel.AutoSize = true;
-            this.progressLabel.Location = new System.Drawing.Point(8, 384);
+            this.progressLabel.Location = new System.Drawing.Point(8, 347);
             this.progressLabel.Name = "progressLabel";
             this.progressLabel.Size = new System.Drawing.Size(125, 17);
             this.progressLabel.TabIndex = 3;
@@ -605,11 +597,57 @@
             this.progressBar.TabIndex = 4;
             this.progressBar.Visible = false;
             // 
+            // sourceSchema
+            // 
+            this.sourceSchema.Location = new System.Drawing.Point(230, 125);
+            this.sourceSchema.Name = "sourceSchema";
+            this.sourceSchema.Size = new System.Drawing.Size(51, 23);
+            this.sourceSchema.TabIndex = 12;
+            // 
+            // destSchema
+            // 
+            this.destSchema.Location = new System.Drawing.Point(230, 125);
+            this.destSchema.Name = "destSchema";
+            this.destSchema.Size = new System.Drawing.Size(51, 23);
+            this.destSchema.TabIndex = 12;
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(154, 192);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(44, 17);
+            this.label2.TabIndex = 17;
+            this.label2.Text = "超时：";
+            // 
+            // sourceTimeout
+            // 
+            this.sourceTimeout.Location = new System.Drawing.Point(221, 189);
+            this.sourceTimeout.Name = "sourceTimeout";
+            this.sourceTimeout.Size = new System.Drawing.Size(60, 23);
+            this.sourceTimeout.TabIndex = 15;
+            // 
+            // destTimeout
+            // 
+            this.destTimeout.Location = new System.Drawing.Point(221, 189);
+            this.destTimeout.Name = "destTimeout";
+            this.destTimeout.Size = new System.Drawing.Size(60, 23);
+            this.destTimeout.TabIndex = 15;
+            // 
+            // label13
+            // 
+            this.label13.AutoSize = true;
+            this.label13.Location = new System.Drawing.Point(154, 192);
+            this.label13.Name = "label13";
+            this.label13.Size = new System.Drawing.Size(44, 17);
+            this.label13.TabIndex = 19;
+            this.label13.Text = "超时：";
+            // 
             // AssistantForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(676, 415);
+            this.ClientSize = new System.Drawing.Size(676, 377);
             this.Controls.Add(this.progressBar);
             this.Controls.Add(this.progressLabel);
             this.Controls.Add(this.btnSave);
@@ -659,7 +697,6 @@
         private System.Windows.Forms.Label label10;
         private System.Windows.Forms.Label label11;
         private System.Windows.Forms.Label label12;
-        private System.Windows.Forms.Label label13;
         private System.Windows.Forms.Label label14;
         private System.Windows.Forms.ComboBox sourceCharSet;
         private System.Windows.Forms.TextBox sourcePwd;
@@ -673,7 +710,6 @@
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Label label3;
-        private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.ImageList imageList;
         private System.Windows.Forms.Button btnImport;
@@ -696,5 +732,11 @@
         private System.Windows.Forms.CheckBox destCompress;
         private System.Windows.Forms.CheckBox sourceEncrypt;
         private System.Windows.Forms.CheckBox sourceCompress;
+        private System.Windows.Forms.TextBox destSchema;
+        private System.Windows.Forms.TextBox sourceSchema;
+        private System.Windows.Forms.TextBox destTimeout;
+        private System.Windows.Forms.Label label13;
+        private System.Windows.Forms.TextBox sourceTimeout;
+        private System.Windows.Forms.Label label2;
     }
 }
