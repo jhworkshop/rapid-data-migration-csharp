@@ -1,6 +1,6 @@
 ﻿using JHWork.DataMigration.Common;
 
-namespace SampleFilter
+namespace JHWork.DataMigration.Filter.Sample
 {
     /// <summary>
     /// 数据过滤器示例

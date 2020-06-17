@@ -5,7 +5,7 @@ using System.Collections.Generic;
 using System.Data;
 using System.Text;
 
-namespace DB2
+namespace JHWork.DataMigration.DBMS.DB2
 {
     /// <summary>
     /// DB2
