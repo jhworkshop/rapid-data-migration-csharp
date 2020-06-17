@@ -22,7 +22,7 @@ namespace JHWork.DataMigration.Common
     /// <summary>
     /// 实例，多个实例并行执行。
     /// </summary>
-    public class Instance
+    public abstract class Instance
     {
         public string Name { get; set; }  // 名称
         public Task[] Tasks { get; set; } // 任务
@@ -55,7 +55,7 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public class MaskingTask : Task
     {
-        public Database Source = new Database();   // 源库
+        public Database Dest = new Database();   // 源库
         public string Params { get; set; }         // 参数脚本
         public MaskingTable[] Tables { get; set; } // 表
         public uint ReadPages { get; set; }        // 每次读取数据批次数
@@ -209,7 +209,7 @@ namespace JHWork.DataMigration.Common
     /// <summary>
     /// 执行器基类，封装一些公共方法
     /// </summary>
-    public class RunnerBase
+    public abstract class RunnerBase
     {
         protected bool Connect(Task task, Database readerDB, out IDBMSReader reader, Database writerDB,
             out IDBMSWriter writer)
@@ -453,7 +453,7 @@ namespace JHWork.DataMigration.Common
     /// <summary>
     /// 任务，同一个实例的任务串行执行。
     /// </summary>
-    public class Task
+    public abstract class Task
     {
         public string Name { get; set; }       // 名称  
         public ulong Progress { get; set; }    // 进度记录数

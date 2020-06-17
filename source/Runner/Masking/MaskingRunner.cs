@@ -65,7 +65,7 @@ namespace JHWork.DataMigration.Runner.Masking
 
                 if (tasks.Count > 0)
                 {
-                    ins.Name = $"{tasks[0].Source.Server}";
+                    ins.Name = $"{tasks[0].Dest.Server}";
                     instances.Add(ins);
                 }
             }
@@ -142,10 +142,10 @@ namespace JHWork.DataMigration.Runner.Masking
             if (!(task.Threads > 0))
                 throw new Exception("并发迁移表数必须大于零(threads)。");
 
-            AnalyseDatabase(obj["source"] as JObject, inherited, task.Source, db, "source");
+            AnalyseDatabase(obj["dest"] as JObject, inherited, task.Dest, db, "dest");
             AnalyseTable($"{path}\\{GetJValue(obj, inherited, "tables")}", task);
 
-            task.Name = $"{task.Source.DB}";
+            task.Name = $"{task.Dest.DB}";
         }
 
         public void Execute(Instance ins, IStopStatus status)
@@ -178,13 +178,13 @@ namespace JHWork.DataMigration.Runner.Masking
 
                             while (table != null)
                             {
-                                Logger.WriteLog($"{task.Source.Server}/{task.Source.DB}.{table.SourceName}", "脱敏开始...");
+                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.SourceName}", "脱敏开始...");
 
                                 MaskTable(task, table, out string reason);
                                 if (table.Status == DataStates.Done)
                                 {
-                                    Logger.WriteLog($"{task.Source.Server}/{task.Source.DB}.{table.SourceName}", "脱敏成功。");
-                                    Logger.WriteRpt(task.Source.Server, task.Source.DB, table.SourceName, "成功",
+                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.SourceName}", "脱敏成功。");
+                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.SourceName, "成功",
                                         table.Progress.ToString("#,##0"));
                                 }
                                 else
@@ -192,9 +192,9 @@ namespace JHWork.DataMigration.Runner.Masking
                                     task.Status = DataStates.RunningError;
                                     task.ErrorMsg = reason;
                                     task.Progress -= table.Progress;
-                                    Logger.WriteLog($"{task.Source.Server}/{task.Source.DB}.{table.SourceName}",
+                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.SourceName}",
                                         $"脱敏失败！{reason}");
-                                    Logger.WriteRpt(task.Source.Server, task.Source.DB, table.SourceName, "失败", reason);
+                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.SourceName, "失败", reason);
                                 }
 
                                 table = GetTable(lst);
@@ -204,19 +204,19 @@ namespace JHWork.DataMigration.Runner.Masking
                         if (status.Stopped || task.Status == DataStates.RunningError || task.Status == DataStates.Error)
                         {
                             task.Status = DataStates.Error;
-                            Logger.WriteLog($"{task.Source.Server}/{task.Source.DB}", "脱敏失败！");
+                            Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", "脱敏失败！");
                         }
                         else
                         {
                             task.Status = DataStates.Done;
-                            Logger.WriteLog($"{task.Source.Server}/{task.Source.DB}", "脱敏成功！");
+                            Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", "脱敏成功！");
                         }
                     }
                     catch (Exception ex)
                     {
                         task.Status = DataStates.Error;
                         task.ErrorMsg = ex.Message;
-                        Logger.WriteLog($"{task.Source.Server}/{task.Source.DB}", $"脱敏失败！{ex.Message}");
+                        Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", $"脱敏失败！{ex.Message}");
                     }
                     task.StartTick = WinAPI.GetTickCount() - task.StartTick;
                 }
@@ -249,8 +249,8 @@ namespace JHWork.DataMigration.Runner.Masking
         {
             if (ins.Tasks[0] is MaskingTask task)
             {
-                source.Duplicate(task.Source);
-                dest.Duplicate(task.Source);
+                source.Duplicate(task.Dest);
+                dest.Duplicate(task.Dest);
 
                 tables.AddRange(task.Tables);
 
@@ -265,7 +265,7 @@ namespace JHWork.DataMigration.Runner.Masking
             reason = "取消操作";
             if (status.Stopped) return;
 
-            if (Connect(task, task.Source, out IDBMSReader source, task.Source, out IDBMSWriter dest))
+            if (Connect(task, task.Dest, out IDBMSReader source, task.Dest, out IDBMSWriter dest))
             {
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -404,7 +404,7 @@ namespace JHWork.DataMigration.Runner.Masking
                     task.Progress = 0;
                     task.Total = 0;
                     task.Status = DataStates.Running;
-                    if (Connect(task, task.Source, out IDBMSReader source, task.Source, out IDBMSWriter dest))
+                    if (Connect(task, task.Dest, out IDBMSReader source, task.Dest, out IDBMSWriter dest))
                     {
                         Dictionary<string, object> parms = new Dictionary<string, object>();
 
@@ -511,7 +511,7 @@ namespace JHWork.DataMigration.Runner.Masking
             WriteFile($"{path}Table-{file}", JsonConvert.SerializeObject(tableData, Formatting.Indented));
 
             // 任务配置
-            JObject srcDB = new JObject()
+            JObject destDB = new JObject()
             {
                 ["dbms"] = dest.DBMS,
                 ["server"] = dest.Server,
@@ -524,16 +524,14 @@ namespace JHWork.DataMigration.Runner.Masking
                 ["encrypt"] = dest.Encrypt ? 1 : 0,
                 ["timeout"] = dest.Timeout,
             };
-            JArray dbArray = new JArray();
-
-            if (source.DB.Equals(dest.DB))
-                dbArray.Add(source.DB);
-            else
-                dbArray.Add($"{source.DB},{dest.DB}");
+            JArray dbArray = new JArray
+            {
+                dest.DB
+            };
 
             JObject task = new JObject()
             {
-                ["source"] = srcDB,
+                ["dest"] = destDB,
                 ["dbs"] = dbArray,
                 ["tables"] = $"Table-{file}",
                 ["readPages"] = 10,

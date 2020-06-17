@@ -134,7 +134,7 @@
 }
 ```
 
-### 数据表配置
+### 迁移/汇集数据表配置
 
 ```
 {
@@ -151,6 +151,51 @@
             "skipFields": "",                                             # 忽略字段，多个字段之间用逗号分隔
             "filter": "",                                                 # 数据过滤器名称
             "references": ""                                              # 外键引用表，多个表名之间用逗号分隔
+        }
+    ]
+}
+```
+
+### 脱敏实例配置
+
+```
+{
+	"dest": {                  # 目标库配置
+		"dbms": "MySQL",       # 数据库类型
+		"server": "127.0.0.1", # 服务器地址
+		"port": 3306,          # 端口号
+		"user": "thomas",      # 登录用户名
+		"schema": "",          # 模式
+		"password": "",        # 登录密码
+		"charset": "utf8mb4",  # 字符集
+        "compress": 1,         # 压缩传输，默认 0
+        "encrypt": 0,          # 加密传输，默认 0
+		"timeout": 60          # 超时秒数，默认 60
+	},
+	"dbs": [                   # 目标库名称列表
+		"wfo_mysql"
+	],
+    "readPages": 25,           # 每次读取数据页数
+    "tables": "Tables.json",   # 数据表配置文件名
+    "threads": 4               # 数据表并行数
+}
+```
+
+### 脱敏数据表配置
+
+```
+{
+    "params": "",   # 参数值获取脚本
+    "tables": [                                                           # 数据表配置列表
+        {
+            "name": "Folios",                                             # 表名，源表和目标表名不同，可用逗号分隔，如 t1,t2
+            "order": 100,                                                 # 执行次序，A-Z 排序，相同次序的可并行处理
+            "orderSQL": "FolioID ASC",                                    # 取数排序脚本，分页取数，要求稳定的排序逻辑
+            "whereSQL": "FolioState IN (2, 3, 5) AND AccDate < @AccDate", # 取数条件，可带参数
+            "pageSize": 1000,                                             # 取数每页记录数
+            "keyFields": "FolioID",                                       # 关键字段，多个字段之间用逗号分隔
+            "maskFields": "",                                             # 脱敏字段，多个字段之间用逗号分隔
+            "filter": ""                                                  # 数据过滤器名称
         }
     ]
 }
