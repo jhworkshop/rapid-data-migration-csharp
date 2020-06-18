@@ -39,17 +39,24 @@ namespace JHWork.DataMigration.Common
                         try
                         {
                             Assembly asm = Assembly.LoadFrom(file); // 同一个文件返回同一个程序集对象
+                            bool loaderExists = false;
 
                             foreach (Type t in asm.ExportedTypes)
-                                if (t.GetInterface("IAssemblyLoader") != null && t.GetInterface(intfName) != null)
-                                    if (asm.CreateInstance(t.FullName, true) is IAssemblyLoader loader)
-                                        lst.Add(loader.GetName().ToLower(),
-                                            new AssemblyInfo()
-                                            {
-                                                Asm = asm,
-                                                Name = t.FullName,
-                                                DisplayName = loader.GetName()
-                                            });
+                                if (t.GetInterface("IAssemblyLoader") != null)
+                                {
+                                    loaderExists = true;
+                                    if (t.GetInterface(intfName) != null)
+                                        if (asm.CreateInstance(t.FullName, true) is IAssemblyLoader loader)
+                                            lst.Add(loader.GetName().ToLower(),
+                                                new AssemblyInfo()
+                                                {
+                                                    Asm = asm,
+                                                    Name = t.FullName,
+                                                    DisplayName = loader.GetName()
+                                                });
+                                }
+
+                            if (!loaderExists) BlackList.Add(file);
                         }
                         catch (Exception ex)
                         {
@@ -103,12 +110,18 @@ namespace JHWork.DataMigration.Common
 
         public static void Add(string s)
         {
-            lst.Add(s);
+            lock (lst)
+            {
+                lst.Add(s);
+            }
         }
 
         public static bool Contains(string s)
         {
-            return lst.Contains(s);
+            lock (lst)
+            {
+                return lst.Contains(s);
+            }
         }
     }
 
