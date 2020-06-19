@@ -302,10 +302,11 @@ namespace JHWork.DataMigration.DBMS.Oracle
         {
             if (string.IsNullOrEmpty(name)) return "";
 
-            if (name.StartsWith("\"")) name = name.Substring(1);
-            if (name.EndsWith("\"")) name = name.Substring(0, name.Length - 1);
+            string[] parts = name.Split('.');
 
-            return name;
+            name = parts[parts.Length - 1]; // 最后一段
+
+            return name.Replace("\"", "");
         }
 
         public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
@@ -359,35 +360,56 @@ namespace JHWork.DataMigration.DBMS.Oracle
             };
         }
 
-        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        protected override string[] GetTableKeys(string table, string schema)
         {
             string sql = "SELECT A.COLUMN_NAME FROM ALL_CONS_COLUMNS A JOIN ALL_CONSTRAINTS B"
                 + " ON A.CONSTRAINT_NAME = B.CONSTRAINT_NAME AND B.CONSTRAINT_TYPE = 'P'"
                 + $" AND B.TABLE_NAME = '{table}'";
 
-            if (!string.IsNullOrEmpty(Schema)) sql += $" AND B.OWNER = '{Schema}'";
+            if (!IsEmpty(out string s, schema, Schema)) sql += $" AND B.OWNER = '{s}'";
 
-            return Query(sql + " ORDER BY A.COLUMN_NAME ASC", null, out data);
+            if (Query(sql + " ORDER BY A.COLUMN_NAME ASC", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        protected override string[] GetTableRefs(string table, string schema)
         {
             string sql = "SELECT A.TABLE_NAME FROM ALL_CONSTRAINTS A JOIN ALL_CONSTRAINTS B"
                 + " ON A.CONSTRAINT_NAME = B.R_CONSTRAINT_NAME AND B.CONSTRAINT_TYPE = 'R'"
                 + $" AND B.TABLE_NAME = '{table}'";
 
-            if (!string.IsNullOrEmpty(Schema)) sql += $" AND B.OWNER = '{Schema}'";
+            if (!IsEmpty(out string s, schema, Schema)) sql += $" AND B.OWNER = '{s}'";
 
-            return Query(sql, null, out data);
+            if (Query(sql, null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTables(out IDataWrapper data)
+        protected override string[] GetTables()
         {
             string sql = "SELECT TABLE_NAME, OWNER FROM ALL_ALL_TABLES";
 
             if (!string.IsNullOrEmpty(Schema)) sql += $" WHERE OWNER = '{Schema}'";
 
-            return Query(sql + " ORDER BY OWNER ASC, TABLE_NAME ASC", null, out data);
+            if (Query(sql + " ORDER BY OWNER ASC, TABLE_NAME ASC", null, out IDataWrapper data))
+                try
+                {
+                    List<string> lst = new List<string>();
+
+                    while (data.Read())
+                        lst.Add($"{data.GetValue(1)}.{data.GetValue(0)}");
+
+                    return lst.ToArray();
+                }
+                finally
+                {
+                    data.Close();
+                }
+            else
+                return new string[] { };
         }
 
         private string ProcessFieldName(string fieldName, string prefix = "")
@@ -448,16 +470,11 @@ namespace JHWork.DataMigration.DBMS.Oracle
                 if (!tableName.StartsWith("\""))
                     tableName = $"\"{tableName}\"";
 
-                if (!string.IsNullOrEmpty(schema))
-                    if (!schema.StartsWith("\""))
-                        tableName = $"\"{schema}\".{tableName}";
+                if (!IsEmpty(out string s, schema, Schema))
+                    if (!s.StartsWith("\""))
+                        tableName = $"\"{s}\".{tableName}";
                     else
-                        tableName = $"{schema}.{tableName}";
-                else if (!string.IsNullOrEmpty(Schema))
-                    if (!Schema.StartsWith("\""))
-                        tableName = $"\"{Schema}\".{tableName}";
-                    else
-                        tableName = $"{Schema}.{tableName}";
+                        tableName = $"{s}.{tableName}";
 
                 if (!string.IsNullOrEmpty(alias))
                     tableName += " " + alias;

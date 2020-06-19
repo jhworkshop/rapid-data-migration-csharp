@@ -212,7 +212,7 @@
             // 
             // columnHeader5
             // 
-            this.columnHeader5.Text = "用时(秒)";
+            this.columnHeader5.Text = "用时";
             this.columnHeader5.TextAlign = System.Windows.Forms.HorizontalAlignment.Right;
             this.columnHeader5.Width = 100;
             // 

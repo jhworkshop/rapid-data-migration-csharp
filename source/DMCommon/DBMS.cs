@@ -102,24 +102,52 @@ namespace JHWork.DataMigration.Common
         /// 获取表主键字段清单
         /// </summary>
         /// <param name="table">表名</param>
-        /// <param name="data">主键字段返回数据</param>
-        /// <returns>成功则返回 true，并返回主键字段清单，否则返回 false</returns>
-        protected abstract bool GetTableKeys(string table, out IDataWrapper data);
+        /// <param name="schema">模式</param>
+        /// <returns>主键字段清单</returns>
+        protected abstract string[] GetTableKeys(string table, string schema);
 
         /// <summary>
         /// 获取表外键指向表清单
         /// </summary>
         /// <param name="table">表名</param>
-        /// <param name="data">外键指向表返回数据</param>
-        /// <returns>成功则返回 true，并返回外键指向表清单，否则返回 false</returns>
-        protected abstract bool GetTableRefs(string table, out IDataWrapper data);
+        /// <param name="schema">模式</param>
+        /// <returns>外键指向表清单</returns>
+        protected abstract string[] GetTableRefs(string table, string schema);
 
         /// <summary>
         /// 获取表清单
         /// </summary>
-        /// <param name="data">表清单返回数据</param>
-        /// <returns>成功则返回 true，并返回表清单，否则返回 false</returns>
-        protected abstract bool GetTables(out IDataWrapper data);
+        /// <returns>表清单</returns>
+        protected abstract string[] GetTables();
+
+        /// <summary>
+        /// 返回首列值清单
+        /// </summary>
+        /// <param name="data">数据</param>
+        /// <returns>首列值清单</returns>
+        protected string[] GetValues(IDataWrapper data)
+        {
+            try
+            {
+                List<string> lst = new List<string>();
+
+                while (data.Read())
+                {
+                    object obj = data.GetValue(0);
+
+                    if (obj == DBNull.Value || obj == null)
+                        lst.Add(null);
+                    else
+                        lst.Add(obj.ToString());
+                }
+
+                return lst.ToArray();
+            }
+            finally
+            {
+                data.Close();
+            }
+        }
 
         public bool GetTables(IProgress progress, List<TableInfo> lst)
         {
@@ -127,58 +155,32 @@ namespace JHWork.DataMigration.Common
             int total = 0, position = 0;
 
             // 获取所有用户表清单
-            if (GetTables(out IDataWrapper data))
-                try
-                {
-                    while (data.Read())
-                        fks.Add(new TableFK() {
-                            Name = (string)data.GetValue(0),
-                            Schema = data.FieldCount > 1 ? (string)data.GetValue(1) : "",
-                            Order = 0
-                        });
+            string[] tables = GetTables();
 
-                    total = data.ReadCount * 2;
-                }
-                finally
+            foreach (string table in tables)
+            {
+                string[] parts = table.Split('.');
+
+                fks.Add(new TableFK()
                 {
-                    data.Close();
-                }
+                    Name = parts.Length > 1 ? parts[1] : parts[0],
+                    Schema = parts.Length > 1 ? parts[0] : "",
+                    Order = 0
+                });
+            }
+            total = tables.Length * 2;
 
             // 获取每个表的主键字段清单
             foreach (TableFK fk in fks)
             {
-                List<string> keys = new List<string>();
-
-                if (GetTableKeys(fk.Name, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) keys.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
-
-                fk.KeyFields = keys.ToArray();
+                fk.KeyFields = GetTableKeys(fk.Name, fk.Schema);
                 progress.OnProgress(total, ++position);
             }
 
             // 获取每个表的外键指向的表清单
             foreach (TableFK fk in fks)
             {
-                if (GetTableRefs(fk.Name, out data))
-                {
-                    try
-                    {
-                        while (data.Read()) fk.FKs.Add((string)data.GetValue(0));
-                    }
-                    finally
-                    {
-                        data.Close();
-                    }
-                }
+                fk.FKs.AddRange(GetTableRefs(fk.Name, fk.Schema));
                 progress.OnProgress(total, ++position);
             }
 
@@ -242,6 +244,25 @@ namespace JHWork.DataMigration.Common
 
             lst.Sort(new TableInfoComparer());
 
+            return true;
+        }
+
+        /// <summary>
+        /// 判断候选项是否全部无内容
+        /// </summary>
+        /// <param name="item">非空内容</param>
+        /// <param name="items">候选项</param>
+        /// <returns>全部无内容则返回 true，否则返回 false，并通过 item 返回第一项非空白项目</returns>
+        protected bool IsEmpty(out string item, params string[] items)
+        {
+            foreach (string s in items)
+                if (!string.IsNullOrEmpty(s))
+                {
+                    item = s;
+                    return false;
+                }
+
+            item = "";
             return true;
         }
     }

@@ -121,9 +121,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
+            string tmpTable = ProcessTableName($"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}", table.DestSchema);
 
             BuildScriptWithDataTable(table, data, filter, out script);
 
@@ -138,7 +137,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 sb.Append($", {field} = B.{field}");
             }
             field = ProcessFieldName(table.KeyFields[0]);
-            sb.Append($" FROM {processedTmpTable} B WHERE {destTable}.{field} = B.{field}");
+            sb.Append($" FROM {tmpTable} B WHERE {destTable}.{field} = B.{field}");
             for (int i = 1; i < table.KeyFields.Length; i++)
             {
                 field = ProcessFieldName(table.KeyFields[i]);
@@ -148,19 +147,18 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             script = new MergeScript()
             {
                 TableName = tmpTable,
-                PrepareSQL = $"SELECT {ProcessFieldNames(table.DestFields)} INTO {processedTmpTable} FROM {destTable} WHERE 1 = 0",
+                PrepareSQL = $"SELECT {ProcessFieldNames(table.DestFields)} INTO {tmpTable} FROM {destTable} WHERE 1 = 0",
                 Data = ((AppendScript)script).Data,
                 MergeSQL = sb.ToString(),
                 MergeSQL2 = "",
-                CleanSQL = $"DROP TABLE {processedTmpTable}"
+                CleanSQL = $"DROP TABLE {tmpTable}"
             };
         }
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
+            string tmpTable = ProcessTableName($"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}", table.DestSchema);
             string mergeSQL, mergeSQL2;
 
             BuildScriptWithDataTable(table, data, filter, out script);
@@ -171,7 +169,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
                 string field = ProcessFieldName(table.KeyFields[0]);
 
-                sb.Append($"MERGE INTO {destTable} A USING {processedTmpTable} B ON A.{field} = B.{field}");
+                sb.Append($"MERGE INTO {destTable} A USING {tmpTable} B ON A.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     field = ProcessFieldName(table.KeyFields[i]);
@@ -205,7 +203,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     sb.Append($", {field} = B.{field}");
                 }
                 field = ProcessFieldName(table.KeyFields[0]);
-                sb.Append($" FROM {processedTmpTable} B WHERE {destTable}.{field} = B.{field}");
+                sb.Append($" FROM {tmpTable} B WHERE {destTable}.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
                     field = ProcessFieldName(table.KeyFields[i]);
@@ -218,7 +216,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 sb.Length = 0;
                 field = ProcessFieldName(table.KeyFields[0]);
                 sb.Append($"INSERT INTO {destTable} ({ProcessFieldNames(fields)}) SELECT")
-                    .Append($" {ProcessFieldNames(fields, "A")} FROM {processedTmpTable} A LEFT JOIN {destTable} B ON")
+                    .Append($" {ProcessFieldNames(fields, "A")} FROM {tmpTable} A LEFT JOIN {destTable} B ON")
                     .Append($"A.{field} = B.{field}");
                 for (int i = 1; i < table.KeyFields.Length; i++)
                 {
@@ -233,11 +231,11 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             script = new MergeScript()
             {
                 TableName = tmpTable,
-                PrepareSQL = $"SELECT * INTO {processedTmpTable} FROM {destTable} WHERE 1 = 0",
+                PrepareSQL = $"SELECT * INTO {tmpTable} FROM {destTable} WHERE 1 = 0",
                 Data = ((AppendScript)script).Data,
                 MergeSQL = mergeSQL,
                 MergeSQL2 = mergeSQL2,
-                CleanSQL = $"DROP TABLE {processedTmpTable}"
+                CleanSQL = $"DROP TABLE {tmpTable}"
             };
         }
 
@@ -276,6 +274,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             string encrypt = db.Encrypt ? "true" : "false";
 
             LogTitle = $"{db.Server}/{db.DB}";
+            Schema = db.Schema;
             Timeout = db.Timeout;
             try
             {
@@ -295,12 +294,13 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        private bool EnableIdentityInsert(string tableName, bool status)
+        private bool EnableIdentityInsert(string tableName, string schema, bool status)
         {
+            tableName = ProcessTableName(tableName, schema);
+
             StringBuilder sb = new StringBuilder()
-                .Append($"IF EXISTS(SELECT 1 FROM sysobjects WHERE name = '{tableName}'")
-                .Append(" AND OBJECTPROPERTY(id, 'TableHasIdentity') = 1) SET IDENTITY_INSERT ")
-                .Append($"{ProcessTableName(tableName)} ").Append(status ? "ON" : "OFF");
+                .Append($"IF OBJECTPROPERTY(OBJECT_ID('{tableName}'), 'TableHasIdentity') = 1")
+                .Append($" SET IDENTITY_INSERT {tableName} ").Append(status ? "ON" : "OFF");
 
             return Execute(sb.ToString(), null, out _);
         }
@@ -318,8 +318,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                     using (SqlBulkCopy bulkCopy = new SqlBulkCopy(conn, option, trans)
                     {
                         BatchSize = 2000,
-                        DestinationTableName = table.DestName,
-                        BulkCopyTimeout = 20
+                        DestinationTableName = table.DestFullName,
+                        BulkCopyTimeout = (int)Timeout
                     })
                     {
                         bulkCopy.WriteToServer(dt.Data);
@@ -339,12 +339,12 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                             {
                                 BatchSize = 2000,
                                 DestinationTableName = ms.TableName,
-                                BulkCopyTimeout = 20
+                                BulkCopyTimeout = (int)Timeout
                             })
                             {
                                 bulkCopy.WriteToServer(ms.Data);
 
-                                if (table.KeepIdentity) EnableIdentityInsert(table.DestName, true);
+                                if (table.KeepIdentity) EnableIdentityInsert(table.DestName, table.DestSchema, true);
                                 try
                                 {
                                     if (Execute(ms.MergeSQL, null, out _))
@@ -360,7 +360,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                                 }
                                 finally
                                 {
-                                    if (table.KeepIdentity) EnableIdentityInsert(table.DestName, false);
+                                    if (table.KeepIdentity) EnableIdentityInsert(table.DestName, table.DestSchema, false);
                                 }
                             }
                         }
@@ -410,9 +410,20 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
+        private string ExtractTableName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+
+            string[] parts = name.Split('.');
+
+            name = parts[parts.Length - 1]; // 最后一段
+
+            return name.Replace("[", "").Replace("]", "");
+        }
+
         public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
         {
-            if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, out IDataWrapper data))
+            if (Query($"SELECT * FROM {ProcessTableName(tableName, schema)} WHERE 1 = 0", null, out IDataWrapper data))
                 try
                 {
                     fieldNames = data.GetFieldNames();
@@ -444,27 +455,53 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             };
         }
 
-        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        protected override string[] GetTableKeys(string table, string schema)
         {
-            return Query("SELECT C.name FROM sys.indexes A JOIN sys.index_columns B"
+            table = ProcessTableName(table, schema);
+
+            if (Query("SELECT C.name FROM sys.indexes A JOIN sys.index_columns B"
                 + " ON A.object_id = B.object_id AND A.index_id = B.index_id"
                 + " JOIN sys.columns C ON B.object_id = C.object_id AND B.column_id = C.column_id"
                 + $" WHERE A.object_id = OBJECT_ID('{table}') AND A.is_primary_key = 1"
-                + " ORDER BY B.index_column_id ASC", null, out data);
+                + " ORDER BY B.index_column_id ASC", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        protected override string[] GetTableRefs(string table, string schema)
         {
-            return Query("SELECT C.name FROM sysconstraints A JOIN sysforeignkeys B ON A.constid = B.constid"
+            table = ProcessTableName(table, schema);
+
+            if (Query("SELECT C.name FROM sysconstraints A JOIN sysforeignkeys B ON A.constid = B.constid"
                 + $" JOIN sysobjects C ON C.type = 'U' AND C.id = B.rkeyid WHERE A.id = OBJECT_ID('{table}')",
-                null, out data);
+                null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTables(out IDataWrapper data)
+        protected override string[] GetTables()
         {
-            return Query("SELECT A.name, B.name AS 'schema' FROM sysobjects A"
-                + " JOIN sysusers B ON A.uid = B.uid WHERE A.type = 'U'"
-                + " ORDER BY B.name ASC, A.name ASC", null, out data);
+            string sql = "SELECT A.name, B.name AS 'schema' FROM sysobjects A JOIN sysusers B ON A.uid = B.uid";
+
+            if (!string.IsNullOrEmpty(Schema)) sql += $" AND B.name = {Schema}";
+            if (Query(sql + " WHERE A.type = 'U' ORDER BY B.name ASC, A.name ASC", null, out IDataWrapper data))
+                try
+                {
+                    List<string> lst = new List<string>();
+
+                    while (data.Read())
+                        lst.Add($"{data.GetValue(1)}.{data.GetValue(0)}");
+
+                    return lst.ToArray();
+                }
+                finally
+                {
+                    data.Close();
+                }
+            else
+                return new string[] { };
         }
 
         private string[] ModifyFields(string[] fields, string[] skipFields, string prefix)
@@ -524,7 +561,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             }
         }
 
-        private string ProcessTableName(string tableName, WithEnums with = WithEnums.None, string alias = "")
+        private string ProcessTableName(string tableName, string schema, WithEnums with = WithEnums.None, string alias = "")
         {
             if (string.IsNullOrEmpty(tableName))
                 return "";
@@ -533,14 +570,18 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 if (!tableName.StartsWith("["))
                     tableName = $"[{tableName}]";
 
+                if (!IsEmpty(out string s, schema, Schema))
+                    if (!s.StartsWith("["))
+                        tableName = $"[{s}].{tableName}";
+                    else
+                        tableName = $"{s}.{tableName}";
+
                 if (!string.IsNullOrEmpty(alias))
                     tableName += $" {alias}";
 
-                string s = "";
-
+                s = "";
                 if ((WithEnums.NoLock & with) != 0)
                     s += ", NOLOCK";
-
                 if (s.Length > 0)
                     tableName += $" WITH({s.Substring(2)})";
 
@@ -581,7 +622,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("SELECT COUNT(*) AS '_ROW_COUNT_' FROM ").Append(ProcessTableName(table.SourceName, with));
+                .Append("SELECT COUNT(*) AS '_ROW_COUNT_' FROM ")
+                .Append(ProcessTableName(table.SourceName, table.SourceSchema, with));
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
@@ -642,9 +684,10 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             // {WHERE {<keyField> > @LastMaxKey} {AND {<whereSQL>}}} ORDER BY <keyField> ASC
             if (table.KeyFields.Length == 1)
             {
-                string tableName = ProcessTableName(table.SourceName, with);
+                string tableName = ProcessTableName(table.SourceName, table.SourceSchema, with);
                 string keyField = ProcessFieldName(table.KeyFields[0]);
-                string keyFieldWithPrefix = ProcessFieldName(table.KeyFields[0], ProcessTableName(table.SourceName));
+                string keyFieldWithPrefix = ProcessFieldName(table.KeyFields[0],
+                    ProcessTableName(table.SourceName, table.SourceSchema));
 
                 // 查询最大键值
                 sb.Append($"SELECT MAX({keyField}) AS '_MaxKey_' FROM (")
@@ -663,7 +706,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
 
                 if (QueryMaxKey(sb.ToString(), parms, out object maxValue))
                 {
-                    string fieldsSQL = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
+                    string fieldsSQL = ProcessFieldNames(table.SourceFields,
+                        ProcessTableName(table.SourceName, table.SourceSchema));
 
                     sb.Length = 0;
                     sb.Append($"SELECT TOP {toRow - fromRow + 1} {fieldsSQL} FROM {tableName}");
@@ -709,10 +753,11 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 if (table.KeyFields.Length > 1)
                 {
                     string fieldsSQL = ProcessFieldNames(table.SourceFields, "B");
-                    string tableName = ProcessTableName(table.SourceName, with);
-                    string tableNameWithB = ProcessTableName(table.SourceName, with, "B");
+                    string tableName = ProcessTableName(table.SourceName, table.SourceSchema, with);
+                    string tableNameWithB = ProcessTableName(table.SourceName, table.SourceSchema, with, "B");
                     string keyFields = ProcessFieldNames(table.KeyFields);
-                    string keyFieldsWithAlias = ProcessFieldNames(table.KeyFields, ProcessTableName(table.SourceName));
+                    string keyFieldsWithAlias = ProcessFieldNames(table.KeyFields,
+                        ProcessTableName(table.SourceName, table.SourceSchema));
                     string keyField = ProcessFieldName(table.KeyFields[0]);
 
                     sb.Append($"SELECT {fieldsSQL} FROM {tableNameWithB} JOIN (SELECT {keyFields} FROM")
@@ -734,10 +779,11 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 else
                 {
                     string fieldsSQL = ProcessFieldNames(table.SourceFields);
-                    string fieldsWithAlias = ProcessFieldNames(table.SourceFields, ProcessTableName(table.SourceName));
+                    string fieldsWithAlias = ProcessFieldNames(table.SourceFields,
+                        ProcessTableName(table.SourceName, table.SourceSchema));
 
                     sb.Append($"SELECT {fieldsSQL} FROM (SELECT ROW_NUMBER() OVER (ORDER BY {table.OrderSQL})")
-                        .Append($" AS '_RowNum_', {fieldsWithAlias} FROM {ProcessTableName(table.SourceName, with)}");
+                        .Append($" AS '_RowNum_', {fieldsWithAlias} FROM {ProcessTableName(table.SourceName, table.SourceSchema, with)}");
                     if (!string.IsNullOrEmpty(table.WhereSQL))
                     {
                         if (table.WhereSQL.IndexOf(" WHERE ", StringComparison.OrdinalIgnoreCase) < 0)
@@ -757,8 +803,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
                 // <tableName.keyFields> = <B.keyFields>
                 // WHERE <B.keyFields[0]> IS NULL
                 // {AND <whereSQL>}
-                string tableName = ProcessTableName(table.SourceName);
-                string tableNameWith = ProcessTableName(table.SourceName, with);
+                string tableName = ProcessTableName(table.SourceName, table.SourceSchema);
+                string tableNameWith = ProcessTableName(table.SourceName, table.SourceSchema, with);
                 string fieldsSQL = ProcessFieldNames(table.SourceFields, tableName);
                 string keyFieldsSQL = ProcessFieldNames(table.KeyFields);
                 string keyField = ProcessFieldName(table.KeyFields[0]);

@@ -303,10 +303,11 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         {
             if (string.IsNullOrEmpty(name)) return "";
 
-            if (name.StartsWith("\"")) name = name.Substring(1);
-            if (name.EndsWith("\"")) name = name.Substring(0, name.Length - 1);
+            string[] parts = name.Split('.');
 
-            return name;
+            name = parts[parts.Length - 1]; // 最后一段
+
+            return name.Replace("\"", "");
         }
 
         public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
@@ -344,37 +345,58 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             };
         }
 
-        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        protected override string[] GetTableKeys(string table, string schema)
         {
             string sql = "select A.relname from pg_class A"
                 + " join pg_constraint B on B.confrelid = A.oid and B.contype = 'f'"
                 + $" join pg_class C on C.oid = B.conrelid and C.relname = '{table}'";
 
-            if (!string.IsNullOrEmpty(Schema))
-                sql += $" join pg_namespace D on D.oid = C.relnamespace and D.nspname = '{Schema}'";
+            if (!IsEmpty(out string s, schema, Schema))
+                sql += $" join pg_namespace D on D.oid = C.relnamespace and D.nspname = '{s}'";
 
-            return Query(sql + " order by A.relname asc", null, out data);
+            if (Query(sql + " order by A.relname asc", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        protected override string[] GetTableRefs(string table, string schema)
         {
             string sql = "select C.attname from pg_constraint A"
                 + $" join pg_class B on A.conrelid = B.oid and B.relname = '{table}'"
                 + " join pg_attribute C on C.attrelid = B.oid and ARRAY_POSITION(A.conkey, C.attnum) > 0";
 
-            if (!string.IsNullOrEmpty(Schema))
-                sql += $" join pg_namespace D on D.oid = B.relnamespace and D.nspname = '{Schema}'";
+            if (!IsEmpty(out string s, schema, Schema))
+                sql += $" join pg_namespace D on D.oid = B.relnamespace and D.nspname = '{s}'";
 
-            return Query(sql + " where A.contype = 'p' order by C.attname asc", null, out data);
+            if (Query(sql + " where A.contype = 'p' order by C.attname asc", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTables(out IDataWrapper data)
+        protected override string[] GetTables()
         {
             string sql = "select tablename, schemaname from pg_tables";
 
             if (!string.IsNullOrEmpty(Schema)) sql += $" where schemaname = '{Schema}'";
 
-            return Query(sql + " order by schemaname asc, tablename asc", null, out data);
+            if (Query(sql + " order by schemaname asc, tablename asc", null, out IDataWrapper data))
+                try
+                {
+                    List<string> lst = new List<string>();
+
+                    while (data.Read())
+                        lst.Add($"{data.GetValue(1)}.{data.GetValue(0)}");
+
+                    return lst.ToArray();
+                }
+                finally
+                {
+                    data.Close();
+                }
+            else
+                return new string[] { };
         }
 
         private bool InternalExecScript(string table, string schema, object script, out uint count)
@@ -508,16 +530,11 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
                 if (!tableName.StartsWith("\""))
                     tableName = $"\"{tableName}\"";
 
-                if (!string.IsNullOrEmpty(schema))
-                    if (!schema.StartsWith("\""))
-                        tableName = $"\"{schema}\".{tableName}";
+                if (!IsEmpty(out string s, schema, Schema))
+                    if (!s.StartsWith("\""))
+                        tableName = $"\"{s}\".{tableName}";
                     else
-                        tableName = $"{schema}.{tableName}";
-                else if (!string.IsNullOrEmpty(Schema))
-                    if (!Schema.StartsWith("\""))
-                        tableName = $"\"{Schema}\".{tableName}";
-                    else
-                        tableName = $"{Schema}.{tableName}";
+                        tableName = $"{s}.{tableName}";
 
                 return tableName;
             }

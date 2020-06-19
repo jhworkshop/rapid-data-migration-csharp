@@ -199,9 +199,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
+            string tmpTable = $"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable, table.DestSchema);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(table.KeyFields[0]);
@@ -238,9 +238,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName);
-            string tmpTable = $"{destTable.Substring(1, destTable.Length - 2)}_{Guid.NewGuid():N}";
-            string processedTmpTable = ProcessTableName(tmpTable);
+            string destTable = ProcessTableName(table.DestName,table.DestSchema);
+            string tmpTable = $"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}";
+            string processedTmpTable = ProcessTableName(tmpTable, table.DestSchema);
             StringBuilder sb = new StringBuilder();
             string[] fields = ExcludeFields(table.DestFields, table.KeyFields, table.SkipFields);
             string field = ProcessFieldName(table.KeyFields[0]);
@@ -297,7 +297,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             data.MapFields(fields);
 
-            sb.Append($"INSERT INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+            sb.Append($"INSERT INTO {ProcessTableName(tableName, table.DestSchema)} ({ProcessFieldNames(fields)})")
                 .AppendLine().Append("VALUES").AppendLine()
                 .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)
@@ -325,7 +325,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
             data.MapFields(fields);
 
-            sb.Append($"REPLACE INTO {ProcessTableName(tableName)} ({ProcessFieldNames(fields)})")
+            sb.Append($"REPLACE INTO {ProcessTableName(tableName, table.DestSchema)} ({ProcessFieldNames(fields)})")
                 .AppendLine().Append("VALUES").AppendLine()
                 .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
             for (int i = 1; i < fields.Length; i++)
@@ -459,6 +459,17 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
         }
 
+        private string ExtractTableName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+
+            string[] parts = name.Split('.');
+
+            name = parts[parts.Length - 1]; // 最后一段
+
+            return name.Replace("`", "");
+        }
+
         private string GetCSVValue(object obj)
         {
             if (obj is DBNull)
@@ -484,7 +495,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
         public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
         {
-            if (Query($"SELECT * FROM {ProcessTableName(tableName)} WHERE 1 = 0", null, out IDataWrapper data))
+            if (Query($"SELECT * FROM {ProcessTableName(tableName, schema)} WHERE 1 = 0", null, out IDataWrapper data))
                 try
                 {
                     fieldNames = data.GetFieldNames();
@@ -548,23 +559,36 @@ namespace JHWork.DataMigration.DBMS.MySQL
             return false;
         }
 
-        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        protected override string[] GetTableKeys(string table, string schema)
         {
-            return Query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
+            IsEmpty(out string s, schema, Schema);
+
+            if (Query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
                 + $" WHERE TABLE_NAME = \"{table}\" AND CONSTRAINT_NAME = \"PRIMARY\""
-                + $" AND TABLE_SCHEMA = \"{Schema}\" ORDER BY ORDINAL_POSITION ASC", null, out data);
+                + $" AND TABLE_SCHEMA = \"{s}\" ORDER BY ORDINAL_POSITION ASC", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        protected override string[] GetTableRefs(string table, string schema)
         {
-            return Query("SELECT REFERENCED_TABLE_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
-                + $" WHERE TABLE_SCHEMA = \"{Schema}\" AND CONSTRAINT_NAME <> \"PRIMARY\""
-                + $" AND TABLE_NAME = \"{table}\" AND REFERENCED_TABLE_NAME IS NOT NULL", null, out data);
+            IsEmpty(out string s, schema, Schema);
+
+            if (Query("SELECT REFERENCED_TABLE_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE"
+                + $" WHERE TABLE_SCHEMA = \"{s}\" AND CONSTRAINT_NAME <> \"PRIMARY\""
+                + $" AND TABLE_NAME = \"{table}\" AND REFERENCED_TABLE_NAME IS NOT NULL", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTables(out IDataWrapper data)
+        protected override string[] GetTables()
         {
-            return Query("SHOW TABLES", null, out data);
+            if (Query("SHOW TABLES", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
         private bool InternalExecScript(string table, object script, out uint count)
@@ -673,7 +697,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             }
         }
 
-        private string ProcessTableName(string tableName)
+        private string ProcessTableName(string tableName, string schema)
         {
             if (string.IsNullOrEmpty(tableName))
                 return "";
@@ -681,6 +705,12 @@ namespace JHWork.DataMigration.DBMS.MySQL
             {
                 if (!tableName.StartsWith("`"))
                     tableName = $"`{tableName}`";
+
+                if (!IsEmpty(out string s, schema, Schema))
+                    if (!s.StartsWith("`"))
+                        tableName = $"`{s}`.{tableName}";
+                    else
+                        tableName = $"{s}.{tableName}";
 
                 return tableName;
             }
@@ -718,7 +748,8 @@ namespace JHWork.DataMigration.DBMS.MySQL
         public bool QueryCount(Table table, WithEnums with, Dictionary<string, object> parms, out ulong count)
         {
             StringBuilder sb = new StringBuilder()
-                .Append("SELECT COUNT(*) AS \"_ROW_COUNT_\" FROM ").Append(ProcessTableName(table.SourceName));
+                .Append("SELECT COUNT(*) AS \"_ROW_COUNT_\" FROM ")
+                .Append(ProcessTableName(table.SourceName, table.SourceSchema));
 
             if (!string.IsNullOrEmpty(table.WhereSQL))
             {
@@ -769,7 +800,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             out IDataWrapper reader)
         {
             StringBuilder sb = new StringBuilder();
-            string tableName = ProcessTableName(table.SourceName);
+            string tableName = ProcessTableName(table.SourceName, table.SourceSchema);
 
             // 语法格式形如：
             // SELECT <fieldsSQL> FROM <tableName> {WHERE <whereSQL>}

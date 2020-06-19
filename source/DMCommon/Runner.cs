@@ -413,9 +413,9 @@ namespace JHWork.DataMigration.Common
             string[] ss = name.Split(new char[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
 
             if (ss.Length == 1)
-                return ss[0];
-            else
                 return "";
+            else
+                return ss[0];
         }
     }
 

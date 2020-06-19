@@ -230,28 +230,30 @@ namespace JHWork.DataMigration.DBMS.DB2
             }
         }
 
-        private bool EnableIdentityInsert(string tableName, bool status)
+        private bool EnableIdentityInsert(string tableName, string schema, bool status)
         {
             string sql = $"SELECT COLNAME FROM SYSCAT.COLUMNS WHERE TABNAME = '{tableName}' AND IDENTITY = 'Y'";
-            if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
+
+            if (!IsEmpty(out string s, schema, Schema)) sql += $" AND TABSCHEMA = '{s}'";
 
             if (Query(sql, null, out IDataWrapper data))
             {
+                List<string> cols = new List<string>();
+
                 try
                 {
                     while (data.Read())
-                    {
-                        string col = data.GetValue(0).ToString();
-
-                        Execute($"ALTER TABLE {ProcessTableName(tableName, Schema)}"
-                            + $" ALTER COLUMN {ProcessFieldName(col)} SET GENERATED "
-                            + (status ? "BY DEFAULT" : "ALWAYS"), null, out _);
-                    }
+                        cols.Add((string)data.GetValue(0));
                 }
                 finally
                 {
                     data.Close();
                 }
+
+                foreach (string col in cols)
+                    Execute($"ALTER TABLE {ProcessTableName(tableName, schema)}"
+                        + $" ALTER COLUMN {ProcessFieldName(col)} SET GENERATED "
+                        + (status ? "BY DEFAULT" : "ALWAYS"), null, out _);
 
                 return true;
             }
@@ -271,24 +273,24 @@ namespace JHWork.DataMigration.DBMS.DB2
                     if (Execute(ms.PrepareSQL, null, out _))
                         try
                         {
-                            if (table.KeepIdentity) EnableIdentityInsert(ms.TableName, true);
+                            if (table.KeepIdentity) EnableIdentityInsert(ms.TableName, table.DestSchema, true);
                             try
                             {
                                 if (!Execute(ms.InsertSQL, null, out count)) return false;
-
-                                if (table.KeepIdentity) EnableIdentityInsert(table.DestName, true);
-                                try
-                                {
-                                    if (Execute(ms.MergeSQL, null, out _)) return true;
-                                }
-                                finally
-                                {
-                                    if (table.KeepIdentity) EnableIdentityInsert(table.DestName, false);
-                                }
                             }
                             finally
                             {
-                                if (table.KeepIdentity) EnableIdentityInsert(ms.TableName, false);
+                                if (table.KeepIdentity) EnableIdentityInsert(ms.TableName, table.DestSchema, false);
+                            }
+
+                            if (table.KeepIdentity) EnableIdentityInsert(table.DestName, table.DestSchema, true);
+                            try
+                            {
+                                if (Execute(ms.MergeSQL, null, out _)) return true;
+                            }
+                            finally
+                            {
+                                if (table.KeepIdentity) EnableIdentityInsert(table.DestName, table.DestSchema, false);
                             }
                         }
                         finally
@@ -339,10 +341,11 @@ namespace JHWork.DataMigration.DBMS.DB2
         {
             if (string.IsNullOrEmpty(name)) return "";
 
-            if (name.StartsWith("\"")) name = name.Substring(1);
-            if (name.EndsWith("\"")) name = name.Substring(0, name.Length - 1);
+            string[] parts = name.Split('.');
 
-            return name;
+            name = parts[parts.Length - 1]; // 最后一段
+
+            return name.Replace("\"", "");
         }
 
         public bool GetFieldNames(string tableName, string schema, out string[] fieldNames)
@@ -395,31 +398,54 @@ namespace JHWork.DataMigration.DBMS.DB2
             };
         }
 
-        protected override bool GetTableKeys(string table, out IDataWrapper data)
+        protected override string[] GetTableKeys(string table, string schema)
         {
             string sql = $"SELECT COLNAME FROM SYSCAT.COLUMNS WHERE TABNAME = '{table}' AND KEYSEQ = 1";
 
-            if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
+            if (string.IsNullOrEmpty(schema)) schema = Schema;
+            if (!string.IsNullOrEmpty(schema)) sql += $" AND TABSCHEMA = '{schema}'";
 
-            return Query(sql + " ORDER BY COLNAME ASC", null, out data);
+            if (Query(sql + " ORDER BY COLNAME ASC", null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTableRefs(string table, out IDataWrapper data)
+        protected override string[] GetTableRefs(string table, string schema)
         {
             string sql = $"SELECT REFTABNAME FROM SYSCAT.REFERENCES WHERE TABNAME = '{table}'";
 
-            if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
+            if (string.IsNullOrEmpty(schema)) schema = Schema;
+            if (!string.IsNullOrEmpty(schema)) sql += $" AND TABSCHEMA = '{schema}'";
 
-            return Query(sql, null, out data);
+            if (Query(sql, null, out IDataWrapper data))
+                return GetValues(data);
+            else
+                return new string[] { };
         }
 
-        protected override bool GetTables(out IDataWrapper data)
+        protected override string[] GetTables()
         {
             string sql = "SELECT TABNAME, TABSCHEMA FROM SYSCAT.TABLES WHERE TYPE = 'T'";
 
             if (!string.IsNullOrEmpty(Schema)) sql += $" AND TABSCHEMA = '{Schema}'";
 
-            return Query(sql + " ORDER BY TABSCHEMA ASC, TABNAME ASC", null, out data);
+            if (Query(sql + " ORDER BY TABSCHEMA ASC, TABNAME ASC", null, out IDataWrapper data))
+                try
+                {
+                    List<string> lst = new List<string>();
+
+                    while (data.Read())
+                        lst.Add($"{data.GetValue(1)}.{data.GetValue(0)}");
+
+                    return lst.ToArray();
+                }
+                finally
+                {
+                    data.Close();
+                }
+            else
+                return new string[] { };
         }
 
         private string ProcessFieldName(string fieldName, string prefix = "")
@@ -480,16 +506,11 @@ namespace JHWork.DataMigration.DBMS.DB2
                 if (!tableName.StartsWith("\""))
                     tableName = $"\"{tableName}\"";
 
-                if (!string.IsNullOrEmpty(schema))
-                    if (!schema.StartsWith("\""))
-                        tableName = $"\"{schema}\".{tableName}";
+                if (!IsEmpty(out string s, schema, Schema))
+                    if (!s.StartsWith("\""))
+                        tableName = $"\"{s}\".{tableName}";
                     else
-                        tableName = $"{schema}.{tableName}";
-                else if (!string.IsNullOrEmpty(Schema))
-                    if (!Schema.StartsWith("\""))
-                        tableName = $"\"{Schema}\".{tableName}";
-                    else
-                        tableName = $"{Schema}.{tableName}";
+                        tableName = $"{s}.{tableName}";
 
                 if (!string.IsNullOrEmpty(alias))
                     tableName += " " + alias;
