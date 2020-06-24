@@ -36,6 +36,9 @@
             this.label15 = new System.Windows.Forms.Label();
             this.tabPage1 = new System.Windows.Forms.TabPage();
             this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.destTimeout = new System.Windows.Forms.TextBox();
+            this.label13 = new System.Windows.Forms.Label();
+            this.destSchema = new System.Windows.Forms.TextBox();
             this.destEncrypt = new System.Windows.Forms.CheckBox();
             this.destCompress = new System.Windows.Forms.CheckBox();
             this.destCharSet = new System.Windows.Forms.ComboBox();
@@ -52,6 +55,9 @@
             this.label12 = new System.Windows.Forms.Label();
             this.label14 = new System.Windows.Forms.Label();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.sourceTimeout = new System.Windows.Forms.TextBox();
+            this.label2 = new System.Windows.Forms.Label();
+            this.sourceSchema = new System.Windows.Forms.TextBox();
             this.sourceEncrypt = new System.Windows.Forms.CheckBox();
             this.sourceCompress = new System.Windows.Forms.CheckBox();
             this.sourceCharSet = new System.Windows.Forms.ComboBox();
@@ -82,12 +88,6 @@
             this.saveDialog = new System.Windows.Forms.SaveFileDialog();
             this.progressLabel = new System.Windows.Forms.Label();
             this.progressBar = new System.Windows.Forms.ProgressBar();
-            this.sourceSchema = new System.Windows.Forms.TextBox();
-            this.destSchema = new System.Windows.Forms.TextBox();
-            this.label2 = new System.Windows.Forms.Label();
-            this.sourceTimeout = new System.Windows.Forms.TextBox();
-            this.destTimeout = new System.Windows.Forms.TextBox();
-            this.label13 = new System.Windows.Forms.Label();
             this.tabControl1.SuspendLayout();
             this.tabPage3.SuspendLayout();
             this.tabPage1.SuspendLayout();
@@ -115,7 +115,7 @@
             this.tabPage3.ImageIndex = 2;
             this.tabPage3.Location = new System.Drawing.Point(4, 31);
             this.tabPage3.Name = "tabPage3";
-            this.tabPage3.Size = new System.Drawing.Size(653, 326);
+            this.tabPage3.Size = new System.Drawing.Size(653, 291);
             this.tabPage3.TabIndex = 2;
             this.tabPage3.Text = "执行器";
             this.tabPage3.UseVisualStyleBackColor = true;
@@ -177,6 +177,29 @@
             this.groupBox2.TabIndex = 1;
             this.groupBox2.TabStop = false;
             this.groupBox2.Text = " 目标 ";
+            // 
+            // destTimeout
+            // 
+            this.destTimeout.Location = new System.Drawing.Point(221, 189);
+            this.destTimeout.Name = "destTimeout";
+            this.destTimeout.Size = new System.Drawing.Size(60, 23);
+            this.destTimeout.TabIndex = 15;
+            // 
+            // label13
+            // 
+            this.label13.AutoSize = true;
+            this.label13.Location = new System.Drawing.Point(154, 192);
+            this.label13.Name = "label13";
+            this.label13.Size = new System.Drawing.Size(64, 17);
+            this.label13.TabIndex = 19;
+            this.label13.Text = "超时(秒)：";
+            // 
+            // destSchema
+            // 
+            this.destSchema.Location = new System.Drawing.Point(230, 125);
+            this.destSchema.Name = "destSchema";
+            this.destSchema.Size = new System.Drawing.Size(51, 23);
+            this.destSchema.TabIndex = 12;
             // 
             // destEncrypt
             // 
@@ -331,6 +354,29 @@
             this.groupBox1.TabIndex = 0;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = " 源 ";
+            // 
+            // sourceTimeout
+            // 
+            this.sourceTimeout.Location = new System.Drawing.Point(221, 189);
+            this.sourceTimeout.Name = "sourceTimeout";
+            this.sourceTimeout.Size = new System.Drawing.Size(60, 23);
+            this.sourceTimeout.TabIndex = 15;
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(154, 192);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(64, 17);
+            this.label2.TabIndex = 17;
+            this.label2.Text = "超时(秒)：";
+            // 
+            // sourceSchema
+            // 
+            this.sourceSchema.Location = new System.Drawing.Point(230, 125);
+            this.sourceSchema.Name = "sourceSchema";
+            this.sourceSchema.Size = new System.Drawing.Size(51, 23);
+            this.sourceSchema.TabIndex = 12;
             // 
             // sourceEncrypt
             // 
@@ -596,52 +642,6 @@
             this.progressBar.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
             this.progressBar.TabIndex = 4;
             this.progressBar.Visible = false;
-            // 
-            // sourceSchema
-            // 
-            this.sourceSchema.Location = new System.Drawing.Point(230, 125);
-            this.sourceSchema.Name = "sourceSchema";
-            this.sourceSchema.Size = new System.Drawing.Size(51, 23);
-            this.sourceSchema.TabIndex = 12;
-            // 
-            // destSchema
-            // 
-            this.destSchema.Location = new System.Drawing.Point(230, 125);
-            this.destSchema.Name = "destSchema";
-            this.destSchema.Size = new System.Drawing.Size(51, 23);
-            this.destSchema.TabIndex = 12;
-            // 
-            // label2
-            // 
-            this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(154, 192);
-            this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(44, 17);
-            this.label2.TabIndex = 17;
-            this.label2.Text = "超时：";
-            // 
-            // sourceTimeout
-            // 
-            this.sourceTimeout.Location = new System.Drawing.Point(221, 189);
-            this.sourceTimeout.Name = "sourceTimeout";
-            this.sourceTimeout.Size = new System.Drawing.Size(60, 23);
-            this.sourceTimeout.TabIndex = 15;
-            // 
-            // destTimeout
-            // 
-            this.destTimeout.Location = new System.Drawing.Point(221, 189);
-            this.destTimeout.Name = "destTimeout";
-            this.destTimeout.Size = new System.Drawing.Size(60, 23);
-            this.destTimeout.TabIndex = 15;
-            // 
-            // label13
-            // 
-            this.label13.AutoSize = true;
-            this.label13.Location = new System.Drawing.Point(154, 192);
-            this.label13.Name = "label13";
-            this.label13.Size = new System.Drawing.Size(44, 17);
-            this.label13.TabIndex = 19;
-            this.label13.Text = "超时：";
             // 
             // AssistantForm
             // 

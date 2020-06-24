@@ -152,7 +152,6 @@ namespace JHWork.DataMigration.Common
         public bool GetTables(IProgress progress, List<TableInfo> lst)
         {
             List<TableFK> fks = new List<TableFK>();
-            int total = 0, position = 0;
 
             // 获取所有用户表清单
             string[] tables = GetTables();
@@ -168,7 +167,9 @@ namespace JHWork.DataMigration.Common
                     Order = 0
                 });
             }
-            total = tables.Length * 2;
+            
+            int total = tables.Length * 2;
+            int position = 0;
 
             // 获取每个表的主键字段清单
             foreach (TableFK fk in fks)
@@ -353,6 +354,10 @@ namespace JHWork.DataMigration.Common
         public bool Encrypt { get; set; } = true;
         public bool Compress { get; set; } = true;
         public bool Timeout { get; set; } = true;
+        public string DefaultPort { get; set; } = "0";
+        public string DefaultSchema { get; set; } = "";
+        public string DefaultCharSet { get; set; } = "";
+        public string DefaultTimeout { get; set; } = "60";
     }
 
     /// <summary>

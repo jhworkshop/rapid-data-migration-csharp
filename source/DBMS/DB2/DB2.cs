@@ -10,7 +10,7 @@ namespace JHWork.DataMigration.DBMS.DB2
     /// <summary>
     /// DB2
     /// </summary>
-    public class DB2 : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class DB2 : DBMSBase, IAssemblyLoader, IDBMSAssistant, IDBMSReader, IDBMSWriter
     {
         private readonly DB2Connection conn = new DB2Connection();
         private DB2Transaction trans = null;
@@ -394,7 +394,8 @@ namespace JHWork.DataMigration.DBMS.DB2
             return new DBMSParams()
             {
                 CharSet = false,
-                Compress = false
+                Compress = false,
+                DefaultPort = "50000"
             };
         }
 

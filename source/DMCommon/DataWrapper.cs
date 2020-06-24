@@ -15,25 +15,17 @@ namespace JHWork.DataMigration.Common
 
         public int FieldCount => indexMaps.Length;
 
-        public int ReadCount { get; private set; }
+        public int ReadCount { get; private set; } = 0;
 
         /// <summary>
         /// 构造函数
         /// </summary>
         /// <param name="reader">源数据</param>
-        /// <param name="dbms">数据源接口</param>
         public IDataReaderWrapper(IDataReader reader)
         {
             this.reader = reader;
 
-            // 创建默认映射
-            indexMaps = new int[reader.FieldCount];
-            names = new string[reader.FieldCount];
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                indexMaps[i] = i;
-                names[i] = reader.GetName(i);
-            }
+            ResetMap();
         }
 
         public void Close()
@@ -86,24 +78,29 @@ namespace JHWork.DataMigration.Common
 
         public void MapFields(string[] fields)
         {
-            Dictionary<string, int> dict = new Dictionary<string, int>();
-
-            // 构造原始字段清单，以支持多次映射
-            for (int i = 0; i < reader.FieldCount; i++)
-                dict.Add(reader.GetName(i).ToLower(), i);
-
-            indexMaps = new int[fields.Length];
-            names = fields;
-
-            // 对照
-            for (int i = 0; i < fields.Length; i++)
+            if (fields == null || fields.Length == 0)
+                ResetMap();
+            else
             {
-                string key = fields[i].ToLower();
+                Dictionary<string, int> dict = new Dictionary<string, int>();
 
-                if (dict.ContainsKey(key))
-                    indexMaps[i] = dict[key];
-                else
-                    indexMaps[i] = -1;
+                // 构造原始字段清单，以支持多次映射
+                for (int i = 0; i < reader.FieldCount; i++)
+                    dict.Add(reader.GetName(i).ToLower(), i);
+
+                indexMaps = new int[fields.Length];
+                names = fields;
+
+                // 对照
+                for (int i = 0; i < fields.Length; i++)
+                {
+                    string key = fields[i].ToLower();
+
+                    if (dict.ContainsKey(key))
+                        indexMaps[i] = dict[key];
+                    else
+                        indexMaps[i] = -1;
+                }
             }
         }
 
@@ -117,6 +114,18 @@ namespace JHWork.DataMigration.Common
             }
             else
                 return false;
+        }
+
+        private void ResetMap()
+        {
+            // 创建默认映射
+            indexMaps = new int[reader.FieldCount];
+            names = new string[reader.FieldCount];
+            for (int i = 0; i < reader.FieldCount; i++)
+            {
+                indexMaps[i] = i;
+                names[i] = reader.GetName(i);
+            }
         }
     }
 

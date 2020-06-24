@@ -158,6 +158,11 @@ namespace JHWork.DataMigration
                     sourceTimeout.Enabled = param.Timeout;
                     sourceEncrypt.Enabled = param.Encrypt;
                     sourceCompress.Enabled = param.Compress;
+
+                    sourcePort.Text = param.DefaultPort;
+                    sourceSchema.Text = param.DefaultSchema;
+                    sourceCharSet.Text = param.DefaultCharSet;
+                    sourceTimeout.Text = param.DefaultTimeout;
                 }
             }
             else if (sender == destDBMS)
@@ -178,6 +183,11 @@ namespace JHWork.DataMigration
                     destTimeout.Enabled = param.Timeout;
                     destEncrypt.Enabled = param.Encrypt;
                     destCompress.Enabled = param.Compress;
+
+                    destPort.Text = param.DefaultPort;
+                    destSchema.Text = param.DefaultSchema;
+                    destCharSet.Text = param.DefaultCharSet;
+                    destTimeout.Text = param.DefaultTimeout;
                 }
             }
         }

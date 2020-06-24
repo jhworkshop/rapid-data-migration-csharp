@@ -111,7 +111,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
     /// <summary>
     /// MySQL
     /// </summary>
-    public class MySQL : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class MySQL : DBMSBase, IAssemblyLoader, IDBMSAssistant, IDBMSReader, IDBMSWriter
     {
         private MySqlConnection conn = null;
         private MySqlTransaction trans = null;
@@ -539,7 +539,9 @@ namespace JHWork.DataMigration.DBMS.MySQL
         {
             return new DBMSParams()
             {
-                Schema = false
+                Schema = false,
+                DefaultCharSet = "utf8mb4",
+                DefaultPort = "3306"
             };
         }
 

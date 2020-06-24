@@ -24,7 +24,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
     /// <summary>
     /// PostgreSQL
     /// </summary>
-    public class PostgreSQL : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class PostgreSQL : DBMSBase, IAssemblyLoader, IDBMSAssistant, IDBMSReader, IDBMSWriter
     {
         private NpgsqlConnection conn;
         private NpgsqlTransaction trans = null;
@@ -341,7 +341,8 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
             return new DBMSParams()
             {
                 CharSet = false,
-                Compress = false
+                Compress = false,
+                DefaultPort = "5432"
             };
         }
 

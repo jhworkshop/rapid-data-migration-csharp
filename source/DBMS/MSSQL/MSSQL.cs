@@ -32,7 +32,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
     /// <summary>
     /// Microsoft SQL Server
     /// </summary>
-    public class MSSQL : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class MSSQL : DBMSBase, IAssemblyLoader, IDBMSAssistant, IDBMSReader, IDBMSWriter
     {
         private readonly SqlConnection conn = new SqlConnection();
         private SqlTransaction trans = null;
@@ -451,7 +451,8 @@ namespace JHWork.DataMigration.DBMS.MSSQL
             return new DBMSParams()
             {
                 CharSet = false,
-                Compress = false
+                Compress = false,
+                DefaultPort = "1433"
             };
         }
 

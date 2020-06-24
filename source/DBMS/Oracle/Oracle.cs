@@ -22,7 +22,7 @@ namespace JHWork.DataMigration.DBMS.Oracle
     /// <summary>
     /// Oracle
     /// </summary>
-    public class Oracle : DBMSBase, IDBMSAssistant, IDBMSReader, IDBMSWriter, IAssemblyLoader
+    public class Oracle : DBMSBase, IAssemblyLoader, IDBMSAssistant, IDBMSReader, IDBMSWriter
     {
         private readonly OracleConnection conn = new OracleConnection();
         private OracleTransaction trans = null;
@@ -356,7 +356,8 @@ namespace JHWork.DataMigration.DBMS.Oracle
             {
                 CharSet = false,
                 Encrypt = false,
-                Compress = false
+                Compress = false,
+                DefaultPort = "1521"
             };
         }
 
