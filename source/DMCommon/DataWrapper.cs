@@ -68,7 +68,13 @@ namespace JHWork.DataMigration.Common
 
         public object GetValueByOriName(string field)
         {
-            int i = reader.GetOrdinal(field);
+            int i = -1;
+
+            try
+            {
+                i = reader.GetOrdinal(field);
+            }
+            catch { }
 
             if (i < 0)
                 return DBNull.Value;
