@@ -398,7 +398,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             string compress = db.Compress ? "true" : "false";
             string encrypt = db.Encrypt ? "Preferred" : "None";
 
-            LogTitle = $"{db.Server}/{db.DB}";
+            LogTitle = $"{db.Server}:{db.Port}/{db.DB}";
             Schema = db.DB;
             Timeout = db.Timeout;
             try

@@ -65,7 +65,7 @@ namespace JHWork.DataMigration.Runner.Masking
 
                 if (tasks.Count > 0)
                 {
-                    ins.Name = $"{tasks[0].Dest.Server}";
+                    ins.Name = $"{tasks[0].Dest.Server}:{tasks[0].Dest.Port}";
                     instances.Add(ins);
                 }
             }

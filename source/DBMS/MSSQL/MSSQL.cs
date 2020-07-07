@@ -273,7 +273,7 @@ namespace JHWork.DataMigration.DBMS.MSSQL
         {
             string encrypt = db.Encrypt ? "true" : "false";
 
-            LogTitle = $"{db.Server}/{db.DB}";
+            LogTitle = $"{db.Server}:{db.Port}/{db.DB}";
             Schema = db.Schema;
             Timeout = db.Timeout;
             try

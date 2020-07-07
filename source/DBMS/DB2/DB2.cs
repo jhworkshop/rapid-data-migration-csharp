@@ -206,7 +206,7 @@ namespace JHWork.DataMigration.DBMS.DB2
         {
             string security = db.Encrypt ? ";Security=SSL" : "";
 
-            LogTitle = $"{db.Server}/{db.DB}";
+            LogTitle = $"{db.Server}:{db.Port}/{db.DB}";
             Schema = db.Schema;
             Timeout = db.Timeout;
             try

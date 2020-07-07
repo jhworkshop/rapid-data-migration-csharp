@@ -80,7 +80,7 @@ namespace JHWork.DataMigration.Runner.Migration
 
                 if (tasks.Count > 0)
                 {
-                    ins.Name = $"{tasks[0].Source.Server} -> {tasks[0].Dest.Server}";
+                    ins.Name = $"{tasks[0].Source.Server}:{tasks[0].Source.Port} -> {tasks[0].Dest.Server}:{tasks[0].Dest.Port}";
                     instances.Add(ins);
                 }
             }

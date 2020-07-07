@@ -238,7 +238,7 @@ namespace JHWork.DataMigration.DBMS.PostgreSQL
         {
             string encrypt = db.Encrypt ? "Require" : "Disable";
 
-            LogTitle = $"{db.Server}/{db.DB}";
+            LogTitle = $"{db.Server}:{db.Port}/{db.DB}";
             Schema = db.Schema;
             Timeout = db.Timeout;
             try

@@ -116,7 +116,7 @@ namespace JHWork.DataMigration.Runner.Integration
                 {
                     IntegrationInstance ins = new IntegrationInstance()
                     {
-                        Name = $"{taskList[0].Dest.Server}/{taskList[0].Dest.DB}",
+                        Name = $"{taskList[0].Dest.Server}:{taskList[0].Dest.Port}/{taskList[0].Dest.DB}",
                         Tasks = taskList.ToArray(),
                         ActualTasks = tasks,
                         Threads = uint.Parse(GetJValue(obj, inherited, "threads"))
