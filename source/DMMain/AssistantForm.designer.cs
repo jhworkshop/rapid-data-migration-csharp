@@ -88,6 +88,8 @@
             this.saveDialog = new System.Windows.Forms.SaveFileDialog();
             this.progressLabel = new System.Windows.Forms.Label();
             this.progressBar = new System.Windows.Forms.ProgressBar();
+            this.label16 = new System.Windows.Forms.Label();
+            this.label17 = new System.Windows.Forms.Label();
             this.tabControl1.SuspendLayout();
             this.tabPage3.SuspendLayout();
             this.tabPage1.SuspendLayout();
@@ -124,7 +126,7 @@
             // 
             this.runner.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.runner.FormattingEnabled = true;
-            this.runner.Location = new System.Drawing.Point(238, 134);
+            this.runner.Location = new System.Drawing.Point(238, 122);
             this.runner.Name = "runner";
             this.runner.Size = new System.Drawing.Size(200, 25);
             this.runner.TabIndex = 9;
@@ -132,7 +134,7 @@
             // label15
             // 
             this.label15.AutoSize = true;
-            this.label15.Location = new System.Drawing.Point(173, 137);
+            this.label15.Location = new System.Drawing.Point(173, 125);
             this.label15.Name = "label15";
             this.label15.Size = new System.Drawing.Size(44, 17);
             this.label15.TabIndex = 8;
@@ -153,6 +155,7 @@
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.label17);
             this.groupBox2.Controls.Add(this.destTimeout);
             this.groupBox2.Controls.Add(this.label13);
             this.groupBox2.Controls.Add(this.destSchema);
@@ -196,9 +199,9 @@
             // 
             // destSchema
             // 
-            this.destSchema.Location = new System.Drawing.Point(230, 125);
+            this.destSchema.Location = new System.Drawing.Point(221, 125);
             this.destSchema.Name = "destSchema";
-            this.destSchema.Size = new System.Drawing.Size(51, 23);
+            this.destSchema.Size = new System.Drawing.Size(60, 23);
             this.destSchema.TabIndex = 12;
             // 
             // destEncrypt
@@ -240,7 +243,7 @@
             // 
             this.destUser.Location = new System.Drawing.Point(81, 125);
             this.destUser.Name = "destUser";
-            this.destUser.Size = new System.Drawing.Size(143, 23);
+            this.destUser.Size = new System.Drawing.Size(64, 23);
             this.destUser.TabIndex = 11;
             // 
             // destDB
@@ -315,9 +318,9 @@
             this.label12.AutoSize = true;
             this.label12.Location = new System.Drawing.Point(16, 128);
             this.label12.Name = "label12";
-            this.label12.Size = new System.Drawing.Size(68, 17);
+            this.label12.Size = new System.Drawing.Size(44, 17);
             this.label12.TabIndex = 2;
-            this.label12.Text = "用户模式：";
+            this.label12.Text = "用户：";
             // 
             // label14
             // 
@@ -330,6 +333,7 @@
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.label16);
             this.groupBox1.Controls.Add(this.sourceTimeout);
             this.groupBox1.Controls.Add(this.label2);
             this.groupBox1.Controls.Add(this.sourceSchema);
@@ -373,9 +377,9 @@
             // 
             // sourceSchema
             // 
-            this.sourceSchema.Location = new System.Drawing.Point(230, 125);
+            this.sourceSchema.Location = new System.Drawing.Point(221, 125);
             this.sourceSchema.Name = "sourceSchema";
-            this.sourceSchema.Size = new System.Drawing.Size(51, 23);
+            this.sourceSchema.Size = new System.Drawing.Size(60, 23);
             this.sourceSchema.TabIndex = 12;
             // 
             // sourceEncrypt
@@ -417,7 +421,7 @@
             // 
             this.sourceUser.Location = new System.Drawing.Point(81, 125);
             this.sourceUser.Name = "sourceUser";
-            this.sourceUser.Size = new System.Drawing.Size(143, 23);
+            this.sourceUser.Size = new System.Drawing.Size(64, 23);
             this.sourceUser.TabIndex = 11;
             // 
             // sourceDB
@@ -492,9 +496,9 @@
             this.label3.AutoSize = true;
             this.label3.Location = new System.Drawing.Point(16, 128);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(68, 17);
+            this.label3.Size = new System.Drawing.Size(44, 17);
             this.label3.TabIndex = 2;
-            this.label3.Text = "用户模式：";
+            this.label3.Text = "用户：";
             // 
             // label1
             // 
@@ -643,6 +647,24 @@
             this.progressBar.TabIndex = 4;
             this.progressBar.Visible = false;
             // 
+            // label16
+            // 
+            this.label16.AutoSize = true;
+            this.label16.Location = new System.Drawing.Point(154, 128);
+            this.label16.Name = "label16";
+            this.label16.Size = new System.Drawing.Size(44, 17);
+            this.label16.TabIndex = 18;
+            this.label16.Text = "模式：";
+            // 
+            // label17
+            // 
+            this.label17.AutoSize = true;
+            this.label17.Location = new System.Drawing.Point(154, 128);
+            this.label17.Name = "label17";
+            this.label17.Size = new System.Drawing.Size(44, 17);
+            this.label17.TabIndex = 20;
+            this.label17.Text = "模式：";
+            // 
             // AssistantForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 17F);
@@ -738,5 +760,7 @@
         private System.Windows.Forms.Label label13;
         private System.Windows.Forms.TextBox sourceTimeout;
         private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.Label label17;
+        private System.Windows.Forms.Label label16;
     }
 }
