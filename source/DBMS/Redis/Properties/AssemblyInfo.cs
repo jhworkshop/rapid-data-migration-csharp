@@ -5,11 +5,11 @@ using System.Runtime.InteropServices;
 // 有关程序集的一般信息由以下
 // 控制。更改这些特性值可修改
 // 与程序集关联的信息。
-[assembly: AssemblyTitle("数据迁移数据过滤器示例")]
+[assembly: AssemblyTitle("数据迁移数据库 Redis 实现")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("jhworkshop")]
-[assembly: AssemblyProduct("数据迁移数据过滤器示例")]
+[assembly: AssemblyProduct("数据迁移数据库 Redis 实现")]
 [assembly: AssemblyCopyright("Copyright © jhworkshop 2020")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
@@ -20,7 +20,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // 如果此项目向 COM 公开，则下列 GUID 用于类型库的 ID
-[assembly: Guid("2dd8cab3-445b-40a3-947d-55a2a3bb190f")]
+[assembly: Guid("8fbc5c0c-1f5d-47c8-b09a-613a52a7718b")]
 
 // 程序集的版本信息由下列四个值组成: 
 //
