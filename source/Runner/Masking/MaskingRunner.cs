@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 //   + MaskingTask[] （串行）
 //       + MaskingTable[] （并行）
 //
-// 即，每个实例包含一组串行任务，每任务包含一组并行迁移表。
+// 即，每个实例包含一组串行任务，每任务包含一组并行表。
 
 namespace JHWork.DataMigration.Runner.Masking
 {
@@ -140,7 +140,7 @@ namespace JHWork.DataMigration.Runner.Masking
             if (!(task.ReadPages > 0))
                 throw new Exception("每次读取数据页数必须大于零(readPages)。");
             if (!(task.Threads > 0))
-                throw new Exception("并发迁移表数必须大于零(threads)。");
+                throw new Exception("并发脱敏表数必须大于零(threads)。");
 
             AnalyseDatabase(obj["dest"] as JObject, inherited, task.Dest, db, "dest");
             AnalyseTable($"{path}\\{GetJValue(obj, inherited, "tables")}", task);
@@ -161,7 +161,7 @@ namespace JHWork.DataMigration.Runner.Masking
                     task.StartTick = WinAPI.GetTickCount();
                     task.Status = DataStates.Running;
 
-                    // 构建待迁移表清单
+                    // 构建待脱敏表清单
                     List<MaskingTable> lst = new List<MaskingTable>();
                     TableComparer comparer = new TableComparer();
 
@@ -169,7 +169,7 @@ namespace JHWork.DataMigration.Runner.Masking
                         if (tt is MaskingTable table) lst.Add(table);
                     lst.Sort(comparer);
 
-                    // 开始迁移
+                    // 开始脱敏
                     try
                     {
                         Parallel.ForEach(CreateThreadAction((int)task.Threads), i =>
@@ -273,7 +273,7 @@ namespace JHWork.DataMigration.Runner.Masking
                 dest.BeginTransaction();
                 try
                 {
-                    // 迁移数据
+                    // 脱敏数据
                     MaskTableWithScript(task, table, parms, source, dest, out reason);
                     if (table.Status != DataStates.Error && !status.Stopped)
                     {
@@ -442,7 +442,7 @@ namespace JHWork.DataMigration.Runner.Masking
             {
                 table.SourceFields = fields;
 
-                // #2: 获取待迁移记录数
+                // #2: 获取待脱敏记录数
                 if (source.QueryCount(table, WithEnums.NoLock, parms, out ulong count))
                 {
                     table.Progress = 0;

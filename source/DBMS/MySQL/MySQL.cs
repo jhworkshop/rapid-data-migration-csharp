@@ -1,5 +1,5 @@
 ﻿using JHWork.DataMigration.Common;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -238,7 +238,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
 
         private void BuildScriptWithMergeSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
-            string destTable = ProcessTableName(table.DestName,table.DestSchema);
+            string destTable = ProcessTableName(table.DestName, table.DestSchema);
             string tmpTable = $"{ExtractTableName(table.DestName)}_{Guid.NewGuid():N}";
             string processedTmpTable = ProcessTableName(tmpTable, table.DestSchema);
             StringBuilder sb = new StringBuilder();

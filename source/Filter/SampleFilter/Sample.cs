@@ -5,7 +5,7 @@ namespace JHWork.DataMigration.Filter.Sample
     /// <summary>
     /// 数据过滤器示例
     /// </summary>
-    public class SampleFilter : IDataFilter, IAssemblyLoader
+    public class SampleFilter : IAssemblyLoader, IDataFilter
     {
         public string GetName()
         {
