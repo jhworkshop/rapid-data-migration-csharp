@@ -54,7 +54,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 schema = Database.AnalyseSchema(db);
             }
             task.Dest.DB = dbName;
-            if(!string.IsNullOrEmpty(schema)) task.Dest.Schema = schema;
+            if (!string.IsNullOrEmpty(schema)) task.Dest.Schema = schema;
         }
 
         public Instance[] AnalyseInstance(JArray objs, JObject inherited, string path)
@@ -112,7 +112,7 @@ namespace JHWork.DataMigration.Runner.Migration
                     WhereSQL = o["whereSQL"].ToString(),
                     PageSize = uint.Parse(o["pageSize"].ToString()),
                     WriteMode = "UPDATE".Equals(o["mode"].ToString().ToUpper()) ? WriteModes.Update : WriteModes.Append,
-                    KeyFields = o["keyFields"].ToString().Split(','),
+                    KeyFields = o["keyFields"].ToString().Length > 0 ? o["keyFields"].ToString().Split(',') : new string[0],
                     SkipFields = o["skipFields"].ToString().Split(','),
                     Filter = o["filter"].ToString(),
                     KeepIdentity = true,
@@ -125,7 +125,7 @@ namespace JHWork.DataMigration.Runner.Migration
 
                 buf.Add(table);
 
-                if (table.WriteMode == WriteModes.Update && "".Equals(table.KeyFields[0]))
+                if (table.WriteMode == WriteModes.Update && (table.KeyFields.Length == 0 || "".Equals(table.KeyFields[0])))
                     throw new Exception($"表 {table.SourceName} 配置有误！更新模式必须指定主键字段(keyFields)。");
                 if ("".Equals(table.OrderSQL))
                     throw new Exception($"表 {table.SourceName} 配置有误！必须指定稳定的排序规则(orderSQL)。");
@@ -184,7 +184,7 @@ namespace JHWork.DataMigration.Runner.Migration
             task.Name = $"{task.Source.DB} -> {task.Dest.DB}";
         }
 
-        public void Execute(Instance ins, IStopStatus status)
+        public void Execute(Instance ins, IStopStatus status, bool withTrans)
         {
             this.status = status;
 
@@ -197,70 +197,49 @@ namespace JHWork.DataMigration.Runner.Migration
                     task.StartTick = WinAPI.GetTickCount();
                     task.Status = DataStates.Running;
 
-                    // 构建待迁移表清单：lst[0] = 独立表，lst[1+] = 依赖树
-                    List<List<MigrationTable>> lst = new List<List<MigrationTable>>
-                    {
-                        new List<MigrationTable>(task.Tables[0]),
-                        new List<MigrationTable>()
-                    };
-
-                    for (int i = 1; i < task.Tables.Length; i++)
-                    {
-                        for (int j = 0; j < task.Tables[i].Length; j++)
-                        {
-                            MigrationTable ta = task.Tables[i][j];
-
-                            for (int k = 0; k < ta.References.Length; k++)
-                                for (int l = 0; l < lst[0].Count; l++)
-                                    if (ta.References[k].Equals(lst[0][l].DestName))
-                                    {
-                                        lst[1].Add(lst[0][l]);
-                                        lst[0].RemoveAt(l);
-                                        break;
-                                    }
-                        }
-                        lst.Add(new List<MigrationTable>(task.Tables[i]));
-                    }
-
+                    // 构建待迁移表清单
+                    List<List<MigrationTable>> lst = new List<List<MigrationTable>>();
                     TableComparer comparer = new TableComparer();
 
-                    foreach (List<MigrationTable> tables in lst)
-                        tables.Sort(comparer);
+                    for (int i = 0; i < task.Tables.Length; i++)
+                    {
+                        List<MigrationTable> tables = new List<MigrationTable>(task.Tables[i]);
 
-                    List<MigrationTable> runList = new List<MigrationTable>();
+                        tables.Sort(comparer);
+                        lst.Add(tables);
+                    }
 
                     // 开始迁移
                     try
                     {
-                        Parallel.ForEach(CreateThreadAction((int)task.Threads), i =>
-                        {
-                            MigrationTable table = GetTable(lst, runList);
-
-                            while (table != null)
+                        foreach (List<MigrationTable> tables in lst)
+                            Parallel.ForEach(CreateThreadAction((int)task.Threads), _ =>
                             {
-                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移开始...");
+                                MigrationTable table = GetTable(tables);
 
-                                MigrateTable(task, table, out string reason);
-                                if (table.Status == DataStates.Done)
+                                while (table != null)
                                 {
-                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移成功。");
-                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "成功",
-                                        table.Progress.ToString("#,##0"));
-                                }
-                                else
-                                {
-                                    task.Status = DataStates.RunningError;
-                                    task.ErrorMsg = reason;
-                                    task.Progress -= table.Progress;
-                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}",
-                                        $"迁移失败！{reason}");
-                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "失败", reason);
-                                }
-                                lock (runList) { runList.Remove(table); }
+                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移开始...");
 
-                                table = GetTable(lst, runList);
-                            }
-                        });
+                                    MigrateTable(task, table, withTrans, out string reason);
+                                    if (table.Status == DataStates.Done)
+                                    {
+                                        Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}", "迁移成功。");
+                                        Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "成功",
+                                            table.Progress.ToString("#,##0"));
+                                    }
+                                    else
+                                    {
+                                        task.Status = DataStates.RunningError;
+                                        task.ErrorMsg = reason;
+                                        task.Progress -= table.Progress;
+                                        Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.DestName}",
+                                            $"迁移失败！{reason}");
+                                        Logger.WriteRpt(task.Dest.Server, task.Dest.DB, table.DestName, "失败", reason);
+                                    }
+                                    table = GetTable(tables);
+                                }
+                            });
 
                         if (status.Stopped || task.Status == DataStates.RunningError || task.Status == DataStates.Error)
                         {
@@ -289,83 +268,20 @@ namespace JHWork.DataMigration.Runner.Migration
             return "Migration";
         }
 
-        private MigrationTable GetTable(List<List<MigrationTable>> lst, List<MigrationTable> runList)
+        private MigrationTable GetTable(List<MigrationTable> tables)
         {
-            while (true)
+            lock (tables)
             {
-                lock (runList)
+                if (tables.Count > 0)
                 {
-                    int dependCount = 0;
-                    // 先从依赖树取
-                    for (int i = 1; i < lst.Count; i++)
-                    {
-                        dependCount += lst[i].Count;
-                        for (int j = 0; j < lst[i].Count; j++)
-                        {
-                            // 无外键依赖
-                            if (lst[i][j].References.Length == 0)
-                            {
-                                MigrationTable rst = lst[i][j];
+                    MigrationTable mt = tables[0];
 
-                                lst[i].RemoveAt(j);
-                                runList.Add(rst);
+                    tables.RemoveAt(0);
 
-                                return rst;
-                            }
-                            else
-                            {
-                                bool inTree = false;
-
-                                foreach (string s in lst[i][j].References)
-                                {
-                                    for (int k = 1; k < i; k++)
-                                    {
-                                        for (int l = 0; l < lst[k].Count; l++)
-                                            if (s.Equals(lst[k][l].DestName))
-                                            {
-                                                inTree = true;
-                                                break;
-                                            }
-                                        if (inTree) break;
-                                    }
-                                    if (inTree) break;
-
-                                    for (int k = 0; k < runList.Count; k++)
-                                        if (s.Equals(runList[k].DestName))
-                                        {
-                                            inTree = true;
-                                            break;
-                                        }
-                                }
-
-                                if (!inTree)
-                                {
-                                    MigrationTable rst = lst[i][j];
-
-                                    lst[i].RemoveAt(j);
-                                    runList.Add(rst);
-
-                                    return rst;
-                                }
-                            }
-                        }
-                    }
-
-                    // 再从独立表取
-                    if (lst[0].Count > 0)
-                    {
-                        MigrationTable rst = lst[0][0];
-
-                        lst[0].RemoveAt(0);
-                        runList.Add(rst);
-
-                        return rst;
-                    }
-                    else if (dependCount == 0)
-                        return null;
+                    return mt;
                 }
-
-                Thread.Sleep(50);
+                else
+                    return null;
             }
         }
 
@@ -385,7 +301,7 @@ namespace JHWork.DataMigration.Runner.Migration
                 param = "";
         }
 
-        private void MigrateTable(MigrationTask task, MigrationTable table, out string reason)
+        private void MigrateTable(MigrationTask task, MigrationTable table, bool withTrans, out string reason)
         {
             reason = "取消操作";
             if (status.Stopped) return;
@@ -395,25 +311,25 @@ namespace JHWork.DataMigration.Runner.Migration
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
                 dest.QueryParam(task.Params, parms);
-                dest.BeginTransaction();
+                if (withTrans) dest.BeginTransaction();
                 try
                 {
                     // 迁移数据
                     MigrateTableWithScript(task, table, parms, source, dest, out reason);
                     if (table.Status != DataStates.Error && !status.Stopped)
                     {
-                        dest.CommitTransaction();
+                        if (withTrans) dest.CommitTransaction();
                         table.Status = DataStates.Done;
                     }
                     else
                     {
-                        dest.RollbackTransaction();
+                        if (withTrans) dest.RollbackTransaction();
                         table.Status = DataStates.Error;
                     }
                 }
                 catch (Exception ex)
                 {
-                    dest.RollbackTransaction();
+                    if (withTrans) dest.RollbackTransaction();
                     table.Status = DataStates.Error;
                     reason = ex.Message;
                 }

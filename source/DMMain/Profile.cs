@@ -11,9 +11,10 @@ namespace JHWork.DataMigration
     /// </summary>
     internal enum RunModes
     {
-        Once,      // 单次
-        Daily,     // 每日
-        Continuous // 持续
+        Once,        // 单次
+        OnceNoTrans, // 单次无事务
+        Daily,       // 每日
+        Continuous   // 持续
     }
 
     /// <summary>
@@ -88,7 +89,7 @@ namespace JHWork.DataMigration
             string mode = obj["mode"].ToString().ToUpper();
 
             Mode = "DAILY".Equals(mode) ? RunModes.Daily : "CONTINUOUS".Equals(mode) ? RunModes.Continuous
-                : RunModes.Once;
+                : "ONCENOTRANS".Equals(mode) ? RunModes.OnceNoTrans : RunModes.Once;
         }
 
         private void AnalyseRunner(JObject obj)

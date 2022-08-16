@@ -38,7 +38,9 @@ namespace JHWork.DataMigration
             try
             {
                 if (profile.Mode == RunModes.Once)
-                    RunOnce(profile);
+                    RunOnce(profile, true);
+                else if (profile.Mode == RunModes.OnceNoTrans)
+                    RunOnce(profile, false);
                 else
                     RunTimes(profile);
             }
@@ -85,7 +87,7 @@ namespace JHWork.DataMigration
             new Thread(InternalRunWithCallback).Start(profile);
         }
 
-        private void RunOnce(Profile profile)
+        private void RunOnce(Profile profile, bool withTrans)
         {
             State = ExecutorState.Running;
             Logger.SetRptFile($"Report-{DateTime.Now:yyMMddHHmm}.csv");
@@ -95,7 +97,7 @@ namespace JHWork.DataMigration
             Parallel.ForEach(profile.Instances, new ParallelOptions() { MaxDegreeOfParallelism = (int)profile.Threads },
                 ins =>
             {
-                profile.Executor.Execute(ins, this);
+                profile.Executor.Execute(ins, this, withTrans);
             });
         }
 
@@ -108,7 +110,7 @@ namespace JHWork.DataMigration
                 Thread.Sleep(1);
                 if (DateTime.Now >= profile.RunTime)
                 {
-                    RunOnce(profile);
+                    RunOnce(profile, true);
                     State = ExecutorState.Planning;
                 }
             }

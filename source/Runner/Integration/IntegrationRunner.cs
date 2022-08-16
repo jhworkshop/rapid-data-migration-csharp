@@ -154,7 +154,7 @@ namespace JHWork.DataMigration.Runner.Integration
                     PageSize = uint.Parse(o["pageSize"].ToString()),
                     WriteMode = "UPDATE".Equals(o["mode"].ToString().ToUpper()) ? WriteModes.Update
                         : WriteModes.Append,
-                    KeyFields = o["keyFields"].ToString().Split(','),
+                    KeyFields = o["keyFields"].ToString().Length > 0 ? o["keyFields"].ToString().Split(',') : new string[0],
                     SkipFields = o["skipFields"].ToString().Split(','),
                     Filter = o["filter"].ToString(),
                     KeepIdentity = false,
@@ -166,7 +166,7 @@ namespace JHWork.DataMigration.Runner.Integration
 
                 buf.Add(table);
 
-                if (table.WriteMode == WriteModes.Update && "".Equals(table.KeyFields[0]))
+                if (table.WriteMode == WriteModes.Update && (table.KeyFields.Length == 0 || "".Equals(table.KeyFields[0])))
                     throw new Exception($"表 {table.SourceName} 配置有误！更新模式必须指定主键字段(keyFields)。");
                 if ("".Equals(table.OrderSQL))
                     throw new Exception($"表 {table.SourceName} 配置有误！必须指定稳定的排序规则(orderSQL)。");
@@ -205,86 +205,64 @@ namespace JHWork.DataMigration.Runner.Integration
                 return new IntegrationTable[][] { };
         }
 
-        public void Execute(Instance ins, IStopStatus status)
+        public void Execute(Instance ins, IStopStatus status, bool withTrans)
         {
             this.status = status;
 
             if (ins is IntegrationInstance instance && instance.ActualTasks.Length > 0)
             {
-                // 构建待汇集任务清单：lst[0] = 独立任务，lst[1+] = 依赖树
-                List<List<IntegrationTask>> lst = new List<List<IntegrationTask>>
-                    {
-                        new List<IntegrationTask>(instance.ActualTasks[0]),
-                        new List<IntegrationTask>()
-                    };
-
-                for (int i = 1; i < instance.ActualTasks.Length; i++)
-                {
-                    for (int j = 0; j < instance.ActualTasks[i].Length; j++)
-                    {
-                        IntegrationTask ta = instance.ActualTasks[i][j];
-
-                        for (int k = 0; k < ta.Table.References.Length; k++)
-                            for (int l = 0; l < lst[0].Count; l++)
-                                if (ta.Table.References[k].Equals(lst[0][l].Table.DestName))
-                                {
-                                    lst[1].Add(lst[0][l]);
-                                    lst[0].RemoveAt(l);
-                                    break;
-                                }
-                    }
-                    lst.Add(new List<IntegrationTask>(instance.ActualTasks[i]));
-                }
-
+                // 构建待汇集任务清单
+                List<List<IntegrationTask>> lst = new List<List<IntegrationTask>>();
                 TaskComparer comparer = new TaskComparer();
 
-                foreach (List<IntegrationTask> tasks in lst)
-                    tasks.Sort(comparer);
+                for (int i = 0; i < instance.ActualTasks.Length; i++)
+                {
+                    List<IntegrationTask> tasks = new List<IntegrationTask>(instance.ActualTasks[i]);
 
-                List<IntegrationTask> runList = new List<IntegrationTask>();
+                    tasks.Sort(comparer);
+                    lst.Add(tasks);
+                }
 
                 // 开始汇集
-                Parallel.ForEach(CreateThreadAction((int)instance.Threads), i =>
-                {
-                    IntegrationTask task = GetTask(lst, runList);
-
-                    while (task != null)
+                foreach (List<IntegrationTask> tasks in lst)
+                    Parallel.ForEach(CreateThreadAction((int)instance.Threads), _ =>
                     {
-                        try
+                        IntegrationTask task = GetTask(tasks);
+
+                        while (task != null)
                         {
-                            Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}", "汇集开始...");
-
-                            task.StartTick = WinAPI.GetTickCount();
-                            task.Status = DataStates.Running;
-
-                            IntegrateTask(task, out string reason);
-                            if (task.Status == DataStates.Done)
+                            try
                             {
-                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}", "汇集成功。");
-                                Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "成功",
-                                    task.Table.Progress.ToString("#,##0"));
-                            }
-                            else
-                            {
-                                task.Progress -= task.Table.Progress;
-                                task.ErrorMsg = reason;
-                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}",
-                                    $"汇集失败！{reason}");
-                                Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "失败", reason);
-                            }
-                            task.StartTick = WinAPI.GetTickCount() - task.StartTick;
-                            lock (runList) { runList.Remove(task); }
+                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}", "汇集开始...");
 
-                            task = GetTask(lst, runList);
+                                task.StartTick = WinAPI.GetTickCount();
+                                task.Status = DataStates.Running;
+
+                                IntegrateTask(task, withTrans, out string reason);
+                                if (task.Status == DataStates.Done)
+                                {
+                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}", "汇集成功。");
+                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "成功",
+                                            task.Table.Progress.ToString("#,##0"));
+                                }
+                                else
+                                {
+                                    task.Progress -= task.Table.Progress;
+                                    task.ErrorMsg = reason;
+                                    Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{task.Table.DestName}",
+                                            $"汇集失败！{reason}");
+                                    Logger.WriteRpt(task.Dest.Server, task.Dest.DB, task.Table.DestName, "失败", reason);
+                                }
+                                task = GetTask(tasks);
+                            }
+                            catch (Exception ex)
+                            {
+                                task.Status = DataStates.Error;
+                                task.ErrorMsg = ex.Message;
+                                Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", $"汇集失败！{ex.Message}");
+                            }
                         }
-                        catch (Exception ex)
-                        {
-                            task.Status = DataStates.Error;
-                            task.ErrorMsg = ex.Message;
-                            Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}", $"汇集失败！{ex.Message}");
-                        }
-                    }
-                });
+                    });
 
                 foreach (Common.Task task in instance.Tasks)
                     if (task.Status != DataStates.Done)
@@ -302,87 +280,24 @@ namespace JHWork.DataMigration.Runner.Integration
             return "Integration";
         }
 
-        private IntegrationTask GetTask(List<List<IntegrationTask>> lst, List<IntegrationTask> runList)
+        private IntegrationTask GetTask(List<IntegrationTask> tasks)
         {
-            while (true)
+            lock (tasks)
             {
-                lock (runList)
+                if (tasks.Count > 0)
                 {
-                    int dependCount = 0;
-                    // 先从依赖树取
-                    for (int i = 1; i < lst.Count; i++)
-                    {
-                        dependCount += lst[i].Count;
-                        for (int j = 0; j < lst[i].Count; j++)
-                        {
-                            // 无外键依赖
-                            if (lst[i][j].Table.References.Length == 0)
-                            {
-                                IntegrationTask rst = lst[i][j];
+                    IntegrationTask task = tasks[0];
 
-                                lst[i].RemoveAt(j);
-                                runList.Add(rst);
+                    tasks.RemoveAt(0);
 
-                                return rst;
-                            }
-                            else
-                            {
-                                bool inTree = false;
-
-                                foreach (string s in lst[i][j].Table.References)
-                                {
-                                    for (int k = 1; k < i; k++)
-                                    {
-                                        for (int l = 0; l < lst[k].Count; l++)
-                                            if (s.Equals(lst[k][l].Table.DestName))
-                                            {
-                                                inTree = true;
-                                                break;
-                                            }
-                                        if (inTree) break;
-                                    }
-                                    if (inTree) break;
-
-                                    for (int k = 0; k < runList.Count; k++)
-                                        if (s.Equals(runList[k].Table.DestName))
-                                        {
-                                            inTree = true;
-                                            break;
-                                        }
-                                }
-
-                                if (!inTree)
-                                {
-                                    IntegrationTask rst = lst[i][j];
-
-                                    lst[i].RemoveAt(j);
-                                    runList.Add(rst);
-
-                                    return rst;
-                                }
-                            }
-                        }
-                    }
-
-                    // 再从独立表取
-                    if (lst[0].Count > 0)
-                    {
-                        IntegrationTask rst = lst[0][0];
-
-                        lst[0].RemoveAt(0);
-                        runList.Add(rst);
-
-                        return rst;
-                    }
-                    else if (dependCount == 0)
-                        return null;
+                    return task;
                 }
-
-                Thread.Sleep(50);
+                else
+                    return null;
             }
         }
 
-        private void IntegrateTask(IntegrationTask task, out string reason)
+        private void IntegrateTask(IntegrationTask task, bool withTrans, out string reason)
         {
             reason = "取消操作";
             if (status.Stopped) return;
@@ -392,20 +307,22 @@ namespace JHWork.DataMigration.Runner.Integration
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
                 dest.QueryParam(task.Params, parms);
-                dest.BeginTransaction();
+                if (withTrans) dest.BeginTransaction();
                 try
                 {
                     // 汇集数据
                     IntegrateTaskWithScript(task, parms, dest, out reason);
 
                     if (task.Status == DataStates.Done)
-                        dest.CommitTransaction();
+                    {
+                        if (withTrans) dest.CommitTransaction();
+                    }
                     else
-                        dest.RollbackTransaction();
+                        if (withTrans) dest.RollbackTransaction();
                 }
                 catch (Exception ex)
                 {
-                    dest.RollbackTransaction();
+                    if (withTrans) dest.RollbackTransaction();
                     task.Status = DataStates.Error;
                     reason = ex.Message;
                 }

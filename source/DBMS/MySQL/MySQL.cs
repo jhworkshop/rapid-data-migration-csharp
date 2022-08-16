@@ -197,6 +197,34 @@ namespace JHWork.DataMigration.DBMS.MySQL
             script = new CSVScript() { CSVFile = file, Fields = fields, Count = r };
         }
 
+        private void BuildScriptWithInsertSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
+            out object script)
+        {
+            StringBuilder sb = new StringBuilder();
+            string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
+
+            data.MapFields(fields);
+
+            sb.Append($"INSERT INTO {ProcessTableName(tableName, table.DestSchema)} ({ProcessFieldNames(fields)})")
+                .AppendLine().Append("VALUES").AppendLine()
+                .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+            for (int i = 1; i < fields.Length; i++)
+                sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
+            sb.Append(")");
+
+            int r = 1;
+            while (r < table.PageSize && data.Read())
+            {
+                r++;
+                sb.Append(",").AppendLine().Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+                for (int i = 1; i < fields.Length; i++)
+                    sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
+                sb.Append(")");
+            }
+
+            script = sb.ToString();
+        }
+
         private void BuildScriptWithMaskSQL(Table table, IDataWrapper data, IDataFilter filter, out object script)
         {
             string destTable = ProcessTableName(table.DestName, table.DestSchema);
@@ -289,7 +317,7 @@ namespace JHWork.DataMigration.DBMS.MySQL
             };
         }
 
-        private void BuildScriptWithInsertSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
+        private void BuildScriptWithReplaceSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
             out object script)
         {
             StringBuilder sb = new StringBuilder();
@@ -314,33 +342,10 @@ namespace JHWork.DataMigration.DBMS.MySQL
                 sb.Append(")");
             }
 
-            script = sb.ToString();
-        }
-
-        private void BuildScriptWithReplaceSQL(Table table, string tableName, IDataWrapper data, IDataFilter filter,
-            out object script)
-        {
-            StringBuilder sb = new StringBuilder();
-            string[] fields = ExcludeFields(table.DestFields, table.SkipFields);
-
-            data.MapFields(fields);
-
-            sb.Append($"REPLACE INTO {ProcessTableName(tableName, table.DestSchema)} ({ProcessFieldNames(fields)})")
-                .AppendLine().Append("VALUES").AppendLine()
-                .Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
+            fields = ExcludeFields(fields, table.KeyFields);
+            sb.Append($" ON DUPLICATE KEY UPDATE {fields[0]} = VALUES({fields[0]})");
             for (int i = 1; i < fields.Length; i++)
-                sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
-            sb.Append(")");
-
-            int r = 1;
-            while (r < table.PageSize && data.Read())
-            {
-                r++;
-                sb.Append(",").AppendLine().Append("(").Append(GetFmtValue(filter.GetValue(data, 0, fields[0])));
-                for (int i = 1; i < fields.Length; i++)
-                    sb.Append(", ").Append(GetFmtValue(filter.GetValue(data, i, fields[i])));
-                sb.Append(")");
-            }
+                sb.Append($", {fields[i]} = VALUES({fields[i]})");
 
             script = sb.ToString();
         }

@@ -97,7 +97,7 @@ namespace JHWork.DataMigration.Runner.Masking
                     WhereSQL = o["whereSQL"].ToString(),
                     PageSize = uint.Parse(o["pageSize"].ToString()),
                     WriteMode = WriteModes.Append,
-                    KeyFields = o["keyFields"].ToString().Split(','),
+                    KeyFields = o["keyFields"].ToString().Length > 0 ? o["keyFields"].ToString().Split(',') : new string[0],
                     SkipFields = new string[] { },
                     MaskFields = o["maskFields"].ToString().Split(','),
                     Filter = o["filter"].ToString(),
@@ -115,7 +115,7 @@ namespace JHWork.DataMigration.Runner.Masking
 
                 buf.Add(table);
 
-                if (table.WriteMode == WriteModes.Update && "".Equals(table.KeyFields[0]))
+                if (table.WriteMode == WriteModes.Update && (table.KeyFields.Length == 0 || "".Equals(table.KeyFields[0])))
                     throw new Exception($"表 {table.SourceName} 配置有误！更新模式必须指定主键字段(keyFields)。");
                 if ("".Equals(table.OrderSQL))
                     throw new Exception($"表 {table.SourceName} 配置有误！必须指定稳定的排序规则(orderSQL)。");
@@ -148,7 +148,7 @@ namespace JHWork.DataMigration.Runner.Masking
             task.Name = $"{task.Dest.DB}";
         }
 
-        public void Execute(Instance ins, IStopStatus status)
+        public void Execute(Instance ins, IStopStatus status, bool withTrans)
         {
             this.status = status;
 
@@ -172,7 +172,7 @@ namespace JHWork.DataMigration.Runner.Masking
                     // 开始脱敏
                     try
                     {
-                        Parallel.ForEach(CreateThreadAction((int)task.Threads), i =>
+                        Parallel.ForEach(CreateThreadAction((int)task.Threads), _ =>
                         {
                             MaskingTable table = GetTable(lst);
 
@@ -180,7 +180,7 @@ namespace JHWork.DataMigration.Runner.Masking
                             {
                                 Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.SourceName}", "脱敏开始...");
 
-                                MaskTable(task, table, out string reason);
+                                MaskTable(task, table, withTrans, out string reason);
                                 if (table.Status == DataStates.Done)
                                 {
                                     Logger.WriteLog($"{task.Dest.Server}/{task.Dest.DB}.{table.SourceName}", "脱敏成功。");
@@ -260,7 +260,7 @@ namespace JHWork.DataMigration.Runner.Masking
                 param = "";
         }
 
-        private void MaskTable(MaskingTask task, MaskingTable table, out string reason)
+        private void MaskTable(MaskingTask task, MaskingTable table, bool withTrans, out string reason)
         {
             reason = "取消操作";
             if (status.Stopped) return;
@@ -270,25 +270,25 @@ namespace JHWork.DataMigration.Runner.Masking
                 Dictionary<string, object> parms = new Dictionary<string, object>();
 
                 dest.QueryParam(task.Params, parms);
-                dest.BeginTransaction();
+                if (withTrans) dest.BeginTransaction();
                 try
                 {
                     // 脱敏数据
                     MaskTableWithScript(task, table, parms, source, dest, out reason);
                     if (table.Status != DataStates.Error && !status.Stopped)
                     {
-                        dest.CommitTransaction();
+                        if (withTrans) dest.CommitTransaction();
                         table.Status = DataStates.Done;
                     }
                     else
                     {
-                        dest.RollbackTransaction();
+                        if (withTrans) dest.RollbackTransaction();
                         table.Status = DataStates.Error;
                     }
                 }
                 catch (Exception ex)
                 {
-                    dest.RollbackTransaction();
+                    if (withTrans) dest.RollbackTransaction();
                     table.Status = DataStates.Error;
                     reason = ex.Message;
                 }

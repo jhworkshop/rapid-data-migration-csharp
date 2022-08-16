@@ -55,7 +55,7 @@ namespace JHWork.DataMigration.Common
     /// </summary>
     public class MaskingTask : Task
     {
-        public Database Dest = new Database();   // 源库
+        public Database Dest = new Database();     // 源库
         public string Params { get; set; }         // 参数脚本
         public MaskingTable[] Tables { get; set; } // 表
         public uint ReadPages { get; set; }        // 每次读取数据批次数
@@ -154,7 +154,8 @@ namespace JHWork.DataMigration.Common
         /// </summary>
         /// <param name="ins">实例</param>
         /// <param name="status">停止状态接口</param>
-        void Execute(Instance ins, IStopStatus status);
+        /// <param name="withTrans">使用事务</param>
+        void Execute(Instance ins, IStopStatus status, bool withTrans);
 
         /// <summary>
         /// 执行预读取
@@ -420,24 +421,20 @@ namespace JHWork.DataMigration.Common
     }
 
     /// <summary>
-    /// 数据表排序对比类
+    /// 数据表排序比较器
     /// </summary>
     public class TableComparer : IComparer<Table>
     {
-        /// <summary>
-        /// 从小到大排序比对
-        /// </summary>
-        /// <param name="x">数据表</param>
-        /// <param name="y">数据表</param>
-        /// <returns>从小到大排序比对结果</returns>
         public int Compare(Table x, Table y)
         {
             int rst = x.Order - y.Order;
 
             if (rst == 0)
             {
+                // 权重计算：记录数 * 字段数
                 ulong weightX = x.Total * (uint)x.DestFields.Length, weightY = y.Total * (uint)y.DestFields.Length;
 
+                // 排序：权重大的排在前面
                 if (weightX > weightY)
                     return -1;
                 else if (weightX < weightY)
